@@ -569,13 +569,20 @@ class SkillInterface(DbAccess):
                 via_id_dict[_id] = [_name]
             # the _id will be present in the next layers list, so we hve to get its number during the next loop
 
-        # get layers
+        # get layers and derived layers
         cmd = 'let((laylist) foreach(layer techid->layers laylist=cons(list(layer->name layer->number) ' \
               'laylist)) laylist)'
         lay_str = self._eval_skill(cmd)[2:-2]
+
+        cmd = 'let((laylist) foreach(layer techid->derivedLayers laylist=cons(list(layer->name layer->number) ' \
+              'laylist)) laylist)'
+        dlay_str = self._eval_skill(cmd)[2:-2]
+
+        all_lay_str = lay_str + ') (' + dlay_str
+
         lay_dict = {}
         via_keys = list(via_id_dict.keys())
-        for sub_str in lay_str.split(') ('):
+        for sub_str in all_lay_str.split(') ('):
             _name, _num = sub_str.split(' ')
             _name = _name[1:-1]
             _num = int(_num)
