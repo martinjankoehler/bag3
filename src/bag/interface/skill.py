@@ -50,17 +50,17 @@ import os
 import shutil
 
 from ..io.common import get_encoding, fix_string
-from ..io.file import open_temp, read_yaml
-from ..io.string import read_yaml_str
+from ..io.file import open_temp, read_yaml, write_file
+from ..io.string import read_yaml_str, to_yaml_str
+from ..layout.routing.grid import RoutingGrid
 from .database import DbAccess
 
-try:
-    import cybagoa
-except ImportError:
-    cybagoa = None
+# try:
+#     import cybagoa
+# except ImportError:
+#     cybagoa = None
 
-if TYPE_CHECKING:
-    from .zmqwrapper import ZMQDealer
+from .zmqwrapper import ZMQDealer
 
 
 def _dict_to_pcell_params(table):
@@ -144,15 +144,15 @@ class SkillInterface(DbAccess):
     an external Virtuoso process, then get the result from it.
     """
 
-    def __init__(self, dealer, tmp_dir, db_config, lib_defs_file):
-        # type: (ZMQDealer, str, Dict[str, Any], str) -> None
+    def __init__(self, dealer: ZMQDealer, tmp_dir: str, db_config: Dict[str, Any],
+                 lib_defs_file: str) -> None:
         DbAccess.__init__(self, dealer, tmp_dir, db_config, lib_defs_file)
         self.exc_libs = set(db_config['schematic']['exclude_libraries'])
         # BAG_prim is always excluded
         self.exc_libs.add('BAG_prim')
 
-    def _eval_skill(self, expr, input_files=None, out_file=None):
-        # type: (str, Optional[Dict[str, Any]], Optional[str]) -> str
+    def _eval_skill(self, expr: str, input_files: Optional[Dict[str, Any]] = None,
+                    out_file: Optional[str] = None) -> str:
         """Send a request to evaluate the given skill expression.
 
         Because Virtuoso has a limit on the input/output data (< 4096 bytes),
@@ -203,56 +203,53 @@ class SkillInterface(DbAccess):
         reply = self.send(request)
         return handle_reply(reply)
 
-    def get_exit_object(self):
-        # type: () -> Any
+    def get_exit_object(self) -> Any:
         return {'type': 'exit'}
 
-    def get_cells_in_library(self, lib_name):
-        # type: (str) -> List[str]
+    def get_cells_in_library(self, lib_name: str) -> List[str]:
         cmd = 'get_cells_in_library_file( "%s" {cell_file} )' % lib_name
         return self._eval_skill(cmd, out_file='cell_file').split()
 
-    def create_library(self, lib_name, lib_path=''):
-        # type: (str, str) -> None
+    def create_library(self, lib_name: str, lib_path: str = '') -> None:
         lib_path = lib_path or self.default_lib_path
         tech_lib = self.db_config['schematic']['tech_lib']
         self._eval_skill(
             'create_or_erase_library("%s" "%s" "%s" nil)' % (lib_name, tech_lib, lib_path))
 
-    def create_implementation(self, lib_name, template_list, change_list, lib_path=''):
-        # type: (str, Sequence[Any], Sequence[Any], str) -> None
+    def create_implementation(self, lib_name: str, template_list: Sequence[Any], change_list: Sequence[Any],
+                              lib_path: str = '') -> None:
         lib_path = lib_path or self.default_lib_path
         tech_lib = self.db_config['schematic']['tech_lib']
 
-        if cybagoa is not None and self.db_config['schematic'].get('use_cybagoa', False):
-            cds_lib_path = os.environ.get('CDS_LIB_PATH', './cds.lib')
-            sch_name = 'schematic'
-            sym_name = 'symbol'
-            encoding = get_encoding()
-            # release write locks
-            cell_view_list = []
-            for _, _, cell_name in template_list:
-                cell_view_list.append((cell_name, sch_name))
-                cell_view_list.append((cell_name, sym_name))
-            self.release_write_locks(lib_name, cell_view_list)
-
-            # create library in case it doesn't exist
-            self.create_library(lib_name, lib_path)
-
-            # write schematic
-            with cybagoa.PyOASchematicWriter(cds_lib_path, lib_name, encoding) as writer:
-                for temp_info, change_info in zip(template_list, change_list):
-                    sch_cell = cybagoa.PySchCell(temp_info[0], temp_info[1], temp_info[2], encoding)
-                    for old_pin, new_pin in change_info['pin_map']:
-                        sch_cell.rename_pin(old_pin, new_pin)
-                    for inst_name, rinst_list in change_info['inst_list']:
-                        sch_cell.add_inst(inst_name, lib_name, rinst_list)
-                    writer.add_sch_cell(sch_cell)
-                writer.create_schematics(sch_name, sym_name)
-
-            copy = 'nil'
-        else:
-            copy = "'t"
+        # if cybagoa is not None and self.db_config['schematic'].get('use_cybagoa', False):
+        #     cds_lib_path = os.environ.get('CDS_LIB_PATH', './cds.lib')
+        #     sch_name = 'schematic'
+        #     sym_name = 'symbol'
+        #     encoding = get_encoding()
+        #     # release write locks
+        #     cell_view_list = []
+        #     for _, _, cell_name in template_list:
+        #         cell_view_list.append((cell_name, sch_name))
+        #         cell_view_list.append((cell_name, sym_name))
+        #     self.release_write_locks(lib_name, cell_view_list)
+        #
+        #     # create library in case it doesn't exist
+        #     self.create_library(lib_name, lib_path)
+        #
+        #     # write schematic
+        #     with cybagoa.PyOASchematicWriter(cds_lib_path, lib_name, encoding) as writer:
+        #         for temp_info, change_info in zip(template_list, change_list):
+        #             sch_cell = cybagoa.PySchCell(temp_info[0], temp_info[1], temp_info[2], encoding)
+        #             for old_pin, new_pin in change_info['pin_map']:
+        #                 sch_cell.rename_pin(old_pin, new_pin)
+        #             for inst_name, rinst_list in change_info['inst_list']:
+        #                 sch_cell.add_inst(inst_name, lib_name, rinst_list)
+        #             writer.add_sch_cell(sch_cell)
+        #         writer.create_schematics(sch_name, sym_name)
+        #
+        #     copy = 'nil'
+        # else:
+        copy = "'t"
 
         in_files = {'template_list': template_list,
                     'change_list': change_list}
@@ -267,8 +264,7 @@ class SkillInterface(DbAccess):
 
         self._eval_skill(cmd, input_files=in_files)
 
-    def configure_testbench(self, tb_lib, tb_cell):
-        # type: (str, str) -> Tuple[str, List[str], Dict[str, str], Dict[str, str]]
+    def configure_testbench(self, tb_lib: str, tb_cell: str) -> Tuple[str, List[str], Dict[str, str], Dict[str, str]]:
 
         tb_config = self.db_config['testbench']
 
@@ -289,8 +285,8 @@ class SkillInterface(DbAccess):
         output = read_yaml(self._eval_skill(cmd, out_file='result_file'))
         return tb_config['default_env'], output['corners'], output['parameters'], output['outputs']
 
-    def get_testbench_info(self, tb_lib, tb_cell):
-        # type: (str, str) -> Tuple[List[str], List[str], Dict[str, str], Dict[str, str]]
+    def get_testbench_info(self, tb_lib: str, tb_cell: str) -> Tuple[List[str], List[str], Dict[str, str],
+                                                                     Dict[str, str]]:
         cmd = 'get_testbench_info("{tb_lib}" "{tb_cell}" {result_file})'
         cmd = cmd.format(tb_lib=tb_lib,
                          tb_cell=tb_cell,
@@ -298,15 +294,8 @@ class SkillInterface(DbAccess):
         output = read_yaml(self._eval_skill(cmd, out_file='result_file'))
         return output['enabled_corners'], output['corners'], output['parameters'], output['outputs']
 
-    def update_testbench(self,  # type: SkillInterface
-                         lib,  # type: str
-                         cell,  # type: str
-                         parameters,  # type: Dict[str, str]
-                         sim_envs,  # type: List[str]
-                         config_rules,  # type: List[List[str]]
-                         env_parameters,  # type: List[List[Tuple[str, str]]]
-                         ):
-        # type: (...) -> None
+    def update_testbench(self, lib: str, cell: str, parameters: Dict[str, str], sim_envs: List[str],
+                         config_rules: List[List[str]], env_parameters: List[List[Tuple[str, str]]]) -> None:
         cmd = 'modify_testbench("%s" "%s" {conf_rules} ' \
               '{run_opts} {sim_envs} {params} {env_params})' % (lib, cell)
         in_files = {'conf_rules': config_rules,
@@ -317,14 +306,12 @@ class SkillInterface(DbAccess):
                     }
         self._eval_skill(cmd, input_files=in_files)
 
-    def instantiate_schematic(self, lib_name, content_list, lib_path='',
-                              sch_view='schematic', sym_view='symbol'):
-        # type: (str, Sequence[Any], str, str, str) -> None
+    def instantiate_schematic(self, lib_name: str, content_list: Sequence[Any], lib_path: str = '',
+                              sch_view: str = 'schematic', sym_view: str = 'symbol') -> None:
         raise NotImplementedError('Not implemented yet.')
 
-    def instantiate_layout_pcell(self, lib_name, cell_name, view_name,
-                                 inst_lib, inst_cell, params, pin_mapping):
-        # type: (str, str, str, str, str, Dict[str, Any], Dict[str, str]) -> None
+    def instantiate_layout_pcell(self, lib_name: str, cell_name: str, view_name: str, inst_lib: str, inst_cell: str,
+                                 params: Dict[str, Any], pin_mapping: Dict[str, str]) -> None:
         # create library in case it doesn't exist
         self.create_library(lib_name)
 
@@ -337,8 +324,19 @@ class SkillInterface(DbAccess):
         in_files = {'params': param_list, 'pin_mapping': list(pin_mapping.items())}
         self._eval_skill(cmd, input_files=in_files)
 
-    def instantiate_layout(self, lib_name, content_list, lib_path='', view='layout'):
-        # type: (str, Sequence[Any], str, str) -> None
+    def create_schematics(self, lib_name: str, sch_view: str, sym_view: str,
+                          content_list: Sequence[Any]) -> None:
+        raise NotImplementedError
+
+    def create_layouts(self, lib_name: str, view: str, content_list: Sequence[Any]) -> None:
+        raise NotImplementedError
+
+    def close_all_cellviews(self) -> None:
+        if self.has_bag_server:
+            self._eval_skill('close_all_cellviews()')
+
+    def instantiate_layout(self, lib_name: str, content_list: Sequence[Any], lib_path: str = '', view: str = 'layout'
+                           ) -> None:
         # create library in case it doesn't exist
         self.create_library(lib_name)
 
@@ -361,26 +359,22 @@ class SkillInterface(DbAccess):
         in_files = {'layout_list': new_layout_list}
         self._eval_skill(cmd, input_files=in_files)
 
-    def release_write_locks(self, lib_name, cell_view_list):
-        # type: (str, Sequence[Tuple[str, str]]) -> None
+    def release_write_locks(self, lib_name: str, cell_view_list: Sequence[Tuple[str, str]]) -> None:
         cmd = 'release_write_locks( "%s" {cell_view_list} )' % lib_name
         in_files = {'cell_view_list': cell_view_list}
         self._eval_skill(cmd, input_files=in_files)
 
-    def refresh_cellviews(self, lib_name, cell_view_list):
-        # type: (str, Sequence[Tuple[str, str]]) -> None
+    def refresh_cellviews(self, lib_name: str, cell_view_list: Sequence[Tuple[str, str]]) -> None:
         cmd = 'refresh_cellviews( "%s" {cell_view_list} )' % lib_name
         in_files = {'cell_view_list': cell_view_list}
         self._eval_skill(cmd, input_files=in_files)
 
-    def perform_checks_on_cell(self, lib_name, cell_name, view_name):
-        # type: (str, str, str) -> None
+    def perform_checks_on_cell(self, lib_name: str, cell_name: str, view_name: str) -> None:
         self._eval_skill(
             'check_and_save_cell( "{}" "{}" "{}" )'.format(lib_name, cell_name, view_name))
 
-    def create_schematic_from_netlist(self, netlist, lib_name, cell_name,
-                                      sch_view='', **kwargs):
-        # type: (str, str, str, str, **Any) -> None
+    def create_schematic_from_netlist(self, netlist: str, lib_name: str, cell_name: str, sch_view: str = '',
+                                      **kwargs: Any) -> None:
         """Create a schematic from a netlist.
 
         This is mainly used to create extracted schematic from an extracted netlist.
@@ -447,8 +441,7 @@ class SkillInterface(DbAccess):
                 pass
             os.symlink(netlist_files[0], symlink)
 
-    def get_cell_directory(self, lib_name, cell_name):
-        # type: (str, str) -> str
+    def get_cell_directory(self, lib_name: str, cell_name: str) -> str:
         """Returns the directory name of the given cell.
 
         Parameters
@@ -464,78 +457,78 @@ class SkillInterface(DbAccess):
             path to the cell directory.
         """
         # use yaml.load to remove outermost quotation marks
-        lib_dir = read_yaml_str(self._eval_skill('get_lib_directory( "%s" )' % lib_name))  # type: str
+        lib_dir = to_yaml_str(read_yaml_str(self._eval_skill('get_lib_directory( "%s" )' % lib_name)))
         if not lib_dir:
             raise ValueError('Library %s not found.' % lib_name)
         return os.path.join(lib_dir, cell_name)
 
-    def create_verilog_view(self, verilog_file, lib_name, cell_name, **kwargs):
-        # type: (str, str, str, **Any) -> None
+    def create_verilog_view(self, verilog_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> None:
         # delete old verilog view
         cmd = 'delete_cellview( "%s" "%s" "verilog" )' % (lib_name, cell_name)
         self._eval_skill(cmd)
         cmd = 'schInstallHDL("%s" "%s" "verilog" "%s" t)' % (lib_name, cell_name, verilog_file)
         self._eval_skill(cmd)
 
-    def import_sch_cellview(self, lib_name, cell_name, view_name):
-        # type: (str, str, str) -> None
+    def import_sch_cellview(self, lib_name: str, cell_name: str, view_name: str) -> None:
         self._import_design(lib_name, cell_name, view_name, set())
 
-    def import_design_library(self, lib_name, view_name):
-        # type: (str, str) -> None
+    def import_design_library(self, lib_name: str, view_name: str) -> None:
         imported_cells = set()
         for cell_name in self.get_cells_in_library(lib_name):
             self._import_design(lib_name, cell_name, view_name, imported_cells)
 
-    def _import_design(self, lib_name, cell_name, view_name, imported_cells):
-        # type: (str, str, str, Set[str]) -> None
+    def import_gds_file(self, gds_fname: str, lib_name: str, layer_map: str, obj_map: str,
+                        grid: RoutingGrid) -> None:
+        raise NotImplementedError
+
+    def _import_design(self, lib_name: str, cell_name: str, view_name: str, imported_cells: Set[str]) -> None:
         """Recursive helper for import_design_library.
         """
-        # check if we already imported this schematic
-        key = '%s__%s' % (lib_name, cell_name)
-        if key in imported_cells:
-            return
-        imported_cells.add(key)
+        raise NotImplementedError
+        # TODO: required dsn_db and new_lib_path in BAG2
+        # # check if we already imported this schematic
+        # key = '%s__%s' % (lib_name, cell_name)
+        # if key in imported_cells:
+        #     return
+        # imported_cells.add(key)
+        #
+        # # create root directory if missing
+        # root_path = dsn_db.get_library_path(lib_name)
+        # if not root_path:
+        #     root_path = new_lib_path
+        #     dsn_db.append_library(lib_name, new_lib_path)
+        #
+        # package_path = os.path.join(root_path, lib_name)
+        # python_file = os.path.join(package_path, '%s.py' % cell_name)
+        # yaml_file = os.path.join(package_path, 'netlist_info', '%s.yaml' % cell_name)
+        # yaml_dir = os.path.dirname(yaml_file)
+        # if not os.path.exists(yaml_dir):
+        #     os.makedirs(yaml_dir)
+        #     write_file(os.path.join(package_path, '__init__.py'), '\n', mkdir=False)
+        #
+        # # update netlist file
+        # content = self.parse_schematic_template(lib_name, cell_name)
+        # sch_info = read_yaml_str(content)
+        # try:
+        #     write_file(yaml_file, content)
+        # except IOError:
+        #     print('Warning: cannot write to %s.' % yaml_file)
+        #
+        # # generate new design module file if necessary.
+        # if not os.path.exists(python_file):
+        #     content = self.get_python_template(lib_name, cell_name,
+        #                                        self.db_config.get('prim_table', {}))
+        #     write_file(python_file, content + '\n', mkdir=False)
+        #
+        # # recursively import all children
+        # for inst_name, inst_attrs in sch_info['instances'].items():
+        #     inst_lib_name = inst_attrs['lib_name']
+        #     if inst_lib_name not in self.exc_libs:
+        #         inst_cell_name = inst_attrs['cell_name']
+        #         self._import_design(inst_lib_name, inst_cell_name, imported_cells, dsn_db,
+        #                             new_lib_path)
 
-        # create root directory if missing
-        root_path = dsn_db.get_library_path(lib_name)
-        if not root_path:
-            root_path = new_lib_path
-            dsn_db.append_library(lib_name, new_lib_path)
-
-        package_path = os.path.join(root_path, lib_name)
-        python_file = os.path.join(package_path, '%s.py' % cell_name)
-        yaml_file = os.path.join(package_path, 'netlist_info', '%s.yaml' % cell_name)
-        yaml_dir = os.path.dirname(yaml_file)
-        if not os.path.exists(yaml_dir):
-            os.makedirs(yaml_dir)
-            bag.io.write_file(os.path.join(package_path, '__init__.py'), '\n',
-                              mkdir=False)
-
-        # update netlist file
-        content = self.parse_schematic_template(lib_name, cell_name)
-        sch_info = read_yaml_str(content)
-        try:
-            bag.io.write_file(yaml_file, content)
-        except IOError:
-            print('Warning: cannot write to %s.' % yaml_file)
-
-        # generate new design module file if necessary.
-        if not os.path.exists(python_file):
-            content = self.get_python_template(lib_name, cell_name,
-                                               self.db_config.get('prim_table', {}))
-            bag.io.write_file(python_file, content + '\n', mkdir=False)
-
-        # recursively import all children
-        for inst_name, inst_attrs in sch_info['instances'].items():
-            inst_lib_name = inst_attrs['lib_name']
-            if inst_lib_name not in self.exc_libs:
-                inst_cell_name = inst_attrs['cell_name']
-                self._import_design(inst_lib_name, inst_cell_name, imported_cells, dsn_db,
-                                    new_lib_path)
-
-    def parse_schematic_template(self, lib_name, cell_name):
-        # type: (str, str) -> str
+    def parse_schematic_template(self, lib_name: str, cell_name: str) -> str:
         """Parse the given schematic template.
 
         Parameters
@@ -552,3 +545,68 @@ class SkillInterface(DbAccess):
         """
         cmd = 'parse_cad_sch( "%s" "%s" {netlist_info} )' % (lib_name, cell_name)
         return self._eval_skill(cmd, out_file='netlist_info')
+
+    def write_tech_info(self, tech_name: str, out_yaml: str) -> None:
+        # get tech file
+        cmd = f'techid=techGetTechFile(ddGetObj("{tech_name}"))'
+        self._eval_skill(cmd)
+
+        # get via definitions
+        cmd = 'let((vialist) foreach(via techid->viaDefs vialist=cons(list(via->name via->layer1Num via->layer2Num' \
+              ' via->params) vialist)) vialist)'
+        via_str = self._eval_skill(cmd)[3:-2]
+        via_dict = {}
+        via_id_dict = {}
+        drawing_purp = 4294967295
+        for sub_str in via_str.split(') ("'):
+            _name, _num_b, _num_t, _id, _ = sub_str.split(' ', 4)
+            _name = _name[:-1]
+            _id = _id[2:-1]
+            via_dict[_name] = [(int(_num_b), drawing_purp), (int(_num_t), drawing_purp)]
+            if _id in via_id_dict:
+                via_id_dict[_id].append(_name)
+            else:
+                via_id_dict[_id] = [_name]
+            # the _id will be present in the next layers list, so we hve to get its number during the next loop
+
+        # get layers
+        cmd = 'let((laylist) foreach(layer techid->layers laylist=cons(list(layer->name layer->number) ' \
+              'laylist)) laylist)'
+        lay_str = self._eval_skill(cmd)[2:-2]
+        lay_dict = {}
+        via_keys = list(via_id_dict.keys())
+        for sub_str in lay_str.split(') ('):
+            _name, _num = sub_str.split(' ')
+            _name = _name[1:-1]
+            _num = int(_num)
+            lay_dict[_num] = _name  # indexing by number so that the dict can be sorted before printing
+            if _name in via_keys:
+                for _via in via_id_dict[_name]:
+                    via_dict[_via].insert(1, (_num, drawing_purp))
+                via_keys.remove(_name)
+
+        # get purposes
+        cmd = 'let((purplist) foreach(purp techid->purposeDefs purplist=cons(list(purp->name purp->number) ' \
+              'purplist)) purplist)'
+        purp_str = self._eval_skill(cmd)[2:-2]
+        purp_dict = {}
+        for sub_str in purp_str.split(') ('):
+            _name, _num = sub_str.split(' ')
+            _num = int(_num)
+            if _num < 0:
+                _num += 4294967296
+            purp_dict[_num] = _name[1:-1]   # indexing by number so that the dict can be sorted before printing
+
+        # write to yaml
+        with open(out_yaml, 'w') as file:
+            file.write('layer:\n')
+            for _num, _name in sorted(lay_dict.items()):
+                file.write(f'  {_name}: {_num}\n')
+            file.write('purpose:\n')
+            for _num, _name in sorted(purp_dict.items()):
+                file.write(f'  {_name}: {_num}\n')
+            file.write('via_layers:\n')
+            for _name, _list in via_dict.items():
+                file.write(f'  {_name}:\n')
+                for _tuple in _list:
+                    file.write(f'    - [{_tuple[0]}, {_tuple[1]}]\n')

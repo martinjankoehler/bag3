@@ -52,7 +52,8 @@ import os
 import shutil
 from pathlib import Path
 
-from pybag.core import PyOADatabase, make_tr_colors
+# from pybag.core import PyOADatabase, make_tr_colors
+from pybag.core import make_tr_colors
 
 from ..io.file import write_file
 from ..layout.routing.grid import RoutingGrid
@@ -76,18 +77,18 @@ class OAInterface(DbAccess):
         if not cds_lib_path:
             cds_lib_path = str((Path(os.environ.get('CDSLIBPATH', '')) / 'cds.lib').resolve())
 
-        self._oa_db = PyOADatabase(cds_lib_path)
-        for lib_name in db_config['schematic']['exclude_libraries']:
-            self._oa_db.add_primitive_lib(lib_name)
-        # BAG_prim is always excluded
-        self._oa_db.add_primitive_lib('BAG_prim')
+        # self._oa_db = PyOADatabase(cds_lib_path)
+        # for lib_name in db_config['schematic']['exclude_libraries']:
+        #     self._oa_db.add_primitive_lib(lib_name)
+        # # BAG_prim is always excluded
+        # self._oa_db.add_primitive_lib('BAG_prim')
 
         DbAccess.__init__(self, dealer, tmp_dir, db_config, lib_defs_file)
 
     def add_sch_library(self, lib_name: str) -> None:
         """Override; register yaml path in PyOADatabase too."""
         lib_path = DbAccess.add_sch_library(self, lib_name)
-        self._oa_db.add_yaml_path(lib_name, str(lib_path / 'netlist_info'))
+        # self._oa_db.add_yaml_path(lib_name, str(lib_path / 'netlist_info'))
 
     def _eval_skill(self, expr: str, input_files: Optional[Dict[str, Any]] = None,
                     out_file: Optional[str] = None) -> str:
@@ -143,20 +144,22 @@ class OAInterface(DbAccess):
 
     def close(self) -> None:
         DbAccess.close(self)
-        if self._oa_db is not None:
-            self._oa_db.close()
-            self._oa_db = None
+        # if self._oa_db is not None:
+        #     self._oa_db.close()
+        #     self._oa_db = None
 
     def get_exit_object(self) -> Any:
         return {'type': 'exit'}
 
     def get_cells_in_library(self, lib_name: str) -> List[str]:
-        return self._oa_db.get_cells_in_lib(lib_name)
+        # return self._oa_db.get_cells_in_lib(lib_name)
+        raise NotImplementedError
 
     def create_library(self, lib_name: str, lib_path: str = '') -> None:
         lib_path = lib_path or self.default_lib_path
         tech_lib = self.db_config['schematic']['tech_lib']
-        self._oa_db.create_lib(lib_name, lib_path, tech_lib)
+        # self._oa_db.create_lib(lib_name, lib_path, tech_lib)
+        raise NotImplementedError
 
     def configure_testbench(self, tb_lib: str, tb_cell: str
                             ) -> Tuple[str, List[str], Dict[str, str], Dict[str, str]]:
@@ -178,10 +181,12 @@ class OAInterface(DbAccess):
 
     def create_schematics(self, lib_name: str, sch_view: str, sym_view: str,
                           content_list: Sequence[Any]) -> None:
-        self._oa_db.implement_sch_list(lib_name, sch_view, sym_view, content_list)
+        # self._oa_db.implement_sch_list(lib_name, sch_view, sym_view, content_list)
+        raise NotImplementedError
 
     def create_layouts(self, lib_name: str, view: str, content_list: Sequence[Any]) -> None:
-        self._oa_db.implement_lay_list(lib_name, view, content_list)
+        # self._oa_db.implement_lay_list(lib_name, view, content_list)
+        raise NotImplementedError
 
     def close_all_cellviews(self) -> None:
         if self.has_bag_server:
@@ -242,7 +247,8 @@ class OAInterface(DbAccess):
         cell_dir : str
             path to the cell directory.
         """
-        return str(Path(self._oa_db.get_lib_path(lib_name)) / cell_name)
+        # return str(Path(self._oa_db.get_lib_path(lib_name)) / cell_name)
+        raise NotImplementedError
 
     def create_verilog_view(self, verilog_file: str, lib_name: str, cell_name: str, **kwargs: Any
                             ) -> None:
@@ -262,7 +268,8 @@ class OAInterface(DbAccess):
             cell_list = [(lib_name, cell_name)]
         else:
             # read schematic information
-            cell_list = self._oa_db.read_sch_recursive(lib_name, cell_name, view_name)
+            # cell_list = self._oa_db.read_sch_recursive(lib_name, cell_name, view_name)
+            raise NotImplementedError
 
         # create python templates
         self._create_sch_templates(cell_list)
@@ -277,7 +284,8 @@ class OAInterface(DbAccess):
             cell_list = [(lib_name, cell) for cell in self.get_cells_in_library(lib_name)]
         else:
             # read schematic information
-            cell_list = self._oa_db.read_library(lib_name, view_name)
+            # cell_list = self._oa_db.read_library(lib_name, view_name)
+            raise NotImplementedError
 
         # create python templates
         self._create_sch_templates(cell_list)
@@ -285,7 +293,8 @@ class OAInterface(DbAccess):
     def import_gds_file(self, gds_fname: str, lib_name: str, layer_map: str, obj_map: str,
                         grid: RoutingGrid) -> None:
         tr_colors = make_tr_colors(grid.tech_info)
-        self._oa_db.import_gds(gds_fname, lib_name, layer_map, obj_map, grid, tr_colors)
+        # self._oa_db.import_gds(gds_fname, lib_name, layer_map, obj_map, grid, tr_colors)
+        raise NotImplementedError
 
     def _create_sch_templates(self, cell_list: List[Tuple[str, str]]) -> None:
         for lib, cell in cell_list:
