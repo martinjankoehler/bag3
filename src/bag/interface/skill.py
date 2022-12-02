@@ -559,9 +559,12 @@ class SkillInterface(DbAccess):
         via_id_dict = {}
         drawing_purp = 4294967295
         for sub_str in via_str.split(') ("'):
-            _name, _num_b, _num_t, _id, _ = sub_str.split(' ', 4)
+            _name, _num_b, _num_t, _id = sub_str.split(' ', 4)[:4]
             _name = _name[:-1]
             _id = _id[2:-1]
+            # Remove extraneous (blank) _id
+            if not _id:
+                continue
             via_dict[_name] = [(int(_num_b), drawing_purp), (int(_num_t), drawing_purp)]
             if _id in via_id_dict:
                 via_id_dict[_id].append(_name)
@@ -583,6 +586,8 @@ class SkillInterface(DbAccess):
         lay_dict = {}
         via_keys = list(via_id_dict.keys())
         for sub_str in all_lay_str.split(') ('):
+            if not sub_str:  # blank edge case
+                continue 
             _name, _num = sub_str.split(' ')
             _name = _name[1:-1]
             _num = int(_num)
