@@ -134,7 +134,7 @@ procedure( parse_data_from_file_helper( p )
 ; Works on schematic and veriloga.
 procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
     let( (cv cell_type p indent direction term_names tb_list tb_match
-          inst_lib_name inst_cell_name inst_cnt)
+          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type)
         indent = ""
         cell_type = "schematic"
         unless( cv = dbOpenCellViewByType( lib_name cell_name "schematic" nil "r" )
@@ -156,6 +156,18 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
         ; print terminals
         fprintf( p "%sterminals:\n" indent )
         foreach( term cv~>terminals
+            if(term~>direction == "inputOutput" then
+                term_cell_name = "iopin"
+                term_type = 2
+            else if(term~>direction == "input" then
+                term_cell_name = "ipin"
+                term_type = 0
+            else
+                term_cell_name = "opin"
+                term_type = 1
+            )
+            )
+
             ; print entry for terminal
             indent = "  "
             fprintf( p "%s%s:\n" indent term~>name )
@@ -165,9 +177,13 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
             indent = "      "
             fprintf( p "%s- inst:\n" indent )
             indent = "          "
+            fprintf( p "%slib_name: basic\n" indent )
+            fprintf( p "%scell_name: %s\n" indent term_cell_name )
             fprintf( p "%sconnections: {}\n" indent )
             fprintf( p "%sparams: {}\n" indent )
             fprintf( p "%sis_primitive: true\n" indent )
+            indent = "    "
+            fprintf( p "%sttype: %d\n" indent term_type )
         )
 
         ; print shapes
@@ -180,6 +196,7 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
             inst_cnt = 0
             fprintf( p "%sinstances:\n" indent )
             foreach( inst cv~>instances
+              if(inst~>purpose != "pin" then
                 inst_cnt++
                 ; print entry for instance
                 indent = "  "
@@ -188,6 +205,7 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
                 indent = "    "
                 fprintf( p "%slib_name: %s\n" indent inst~>libName )
                 fprintf( p "%scell_name: %s\n" indent inst~>cellName )
+                fprintf( p "%sview_name: %s\n" indent inst~>viewName )
                 ; print instance terminal information
                 if( !(inst~>instTerms) then
                     fprintf( p "%sconnections: {}\n" indent )
@@ -203,6 +221,7 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
                 )
                 indent = "    "
                 fprintf( p "%sparams: {}\n" indent )
+              )
             )
             when(inst_cnt == 0
                 fprintf( p "  {}\n" )
