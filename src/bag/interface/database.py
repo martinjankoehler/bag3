@@ -55,7 +55,7 @@ from pathlib import Path
 
 from pybag.core import gds_equal
 
-from ..io.file import make_temp_dir, open_file, read_file
+from ..io.file import make_temp_dir, open_file, read_file, write_file
 from ..verification import make_checker
 from ..layout.routing.grid import RoutingGrid
 from ..concurrent.core import batch_async_task
@@ -105,6 +105,30 @@ def format_inst_map(inst_map: Dict[str, Any]) -> List[List[Any]]:
                                ) for rinst in rinst_list]
         ans.append([old_inst_name, new_rinst_list])
     return ans
+
+
+def handle_reply(reply):
+    """Process the given reply."""
+    if isinstance(reply, dict):
+        if reply.get('type') == 'error':
+            if 'data' not in reply:
+                raise Exception('Unknown reply format: %s' % reply)
+            raise VirtuosoException(reply['data'])
+        else:
+            try:
+                return reply['data']
+            except Exception:
+                raise Exception('Unknown reply format: %s' % reply)
+    else:
+        raise Exception('Unknown reply format: %s' % reply)
+
+
+class VirtuosoException(Exception):
+    """Exception raised when Virtuoso returns an error."""
+
+    def __init__(self, *args, **kwargs):
+        # noinspection PyArgumentList
+        Exception.__init__(self, *args, **kwargs)
 
 
 class DbAccess(InterfaceBase, abc.ABC):
@@ -488,6 +512,58 @@ class DbAccess(InterfaceBase, abc.ABC):
             self.handler.close()
             self.handler = None
 
+    def _eval_skill(self, expr: str, input_files: Optional[Dict[str, Any]] = None,
+                    out_file: Optional[str] = None) -> str:
+        """Send a request to evaluate the given skill expression.
+
+        Because Virtuoso has a limit on the input/output data (< 4096 bytes),
+        if your input is large, you need to write it to a file and have
+        Virtuoso open the file to parse it.  Similarly, if you expect a
+        large output, you need to make Virtuoso write the result to the
+        file, then read it yourself.  The parameters input_files and
+        out_file help you achieve this functionality.
+
+        For example, if you need to evaluate "skill_fun(arg fname)", where
+        arg is a file containing the list [1 2 3], and fname is the output
+        file name, you will call this function with:
+
+        expr = "skill_fun({arg} {fname})"
+        input_files = { "arg": [1 2 3] }
+        out_file = "fname"
+
+        the bag server will then a temporary file for arg and fname, write
+        the list [1 2 3] into the file for arg, call Virtuoso, then read
+        the output file fname and return the result.
+
+        Parameters
+        ----------
+        expr :
+            the skill expression to evaluate.
+        input_files :
+            A dictionary of input files content.
+        out_file :
+            the output file name argument in expr.
+
+        Returns
+        -------
+        result :
+            a string representation of the result.
+
+        Raises
+        ------
+        VirtuosoException :
+            if virtuoso encounters errors while evaluating the expression.
+        """
+        request = dict(
+            type='skill',
+            expr=expr,
+            input_files=input_files,
+            out_file=out_file,
+        )
+
+        reply = self.send(request)
+        return handle_reply(reply)
+
     def get_python_template(self, lib_name: str, cell_name: str, primitive_table: Dict[str, str]
                             ) -> str:
         """Returns the default Python Module template for the given schematic.
@@ -538,6 +614,14 @@ class DbAccess(InterfaceBase, abc.ABC):
         else:
             # use default empty template.
             return self.render_file_template('Module.pyi', param_dict)
+
+    def _create_sch_templates(self, cell_list: List[Tuple[str, str]]) -> None:
+        for lib, cell in cell_list:
+            python_file = Path(self.lib_path_map[lib]) / (cell + '.py')
+            if not python_file.exists():
+                content = self.get_python_template(lib, cell,
+                                                   self.db_config.get('prim_table', {}))
+                write_file(python_file, content, mkdir=False)
 
     def instantiate_schematic(self, lib_name: str, content_list: Sequence[Any], lib_path: str = '',
                               sch_view: str = 'schematic', sym_view: str = 'symbol') -> None:

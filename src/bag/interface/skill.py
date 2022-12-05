@@ -44,21 +44,16 @@
 """This module implements all CAD database manipulations using skill commands.
 """
 
-from typing import TYPE_CHECKING, Sequence, List, Dict, Optional, Any, Tuple, Set
+from typing import Sequence, List, Dict, Optional, Any, Tuple
 
-import os
 import shutil
+from pathlib import Path
 
-from ..io.common import get_encoding, fix_string
+from ..io.common import fix_string
 from ..io.file import open_temp, read_yaml, write_file
 from ..io.string import read_yaml_str, to_yaml_str
 from ..layout.routing.grid import RoutingGrid
 from .database import DbAccess
-
-# try:
-#     import cybagoa
-# except ImportError:
-#     cybagoa = None
 
 from .zmqwrapper import ZMQDealer
 
@@ -109,32 +104,8 @@ def to_skill_list_str(pylist):
         a string representation of the equivalent skill list.
 
     """
-    content = ' '.join(('"%s"' % val for val in pylist))
-    return "'( %s )" % content
-
-
-def handle_reply(reply):
-    """Process the given reply."""
-    if isinstance(reply, dict):
-        if reply.get('type') == 'error':
-            if 'data' not in reply:
-                raise Exception('Unknown reply format: %s' % reply)
-            raise VirtuosoException(reply['data'])
-        else:
-            try:
-                return reply['data']
-            except Exception:
-                raise Exception('Unknown reply format: %s' % reply)
-    else:
-        raise Exception('Unknown reply format: %s' % reply)
-
-
-class VirtuosoException(Exception):
-    """Exception raised when Virtuoso returns an error."""
-
-    def __init__(self, *args, **kwargs):
-        # noinspection PyArgumentList
-        Exception.__init__(self, *args, **kwargs)
+    content = ' '.join((f'"{val}"' for val in pylist))
+    return f"'( {content} )"
 
 
 class SkillInterface(DbAccess):
@@ -150,58 +121,6 @@ class SkillInterface(DbAccess):
         self.exc_libs = set(db_config['schematic']['exclude_libraries'])
         # BAG_prim is always excluded
         self.exc_libs.add('BAG_prim')
-
-    def _eval_skill(self, expr: str, input_files: Optional[Dict[str, Any]] = None,
-                    out_file: Optional[str] = None) -> str:
-        """Send a request to evaluate the given skill expression.
-
-        Because Virtuoso has a limit on the input/output data (< 4096 bytes),
-        if your input is large, you need to write it to a file and have
-        Virtuoso open the file to parse it.  Similarly, if you expect a
-        large output, you need to make Virtuoso write the result to the
-        file, then read it yourself.  The parameters input_files and
-        out_file help you achieve this functionality.
-
-        For example, if you need to evaluate "skill_fun(arg fname)", where
-        arg is a file containing the list [1 2 3], and fname is the output
-        file name, you will call this function with:
-
-        expr = "skill_fun({arg} {fname})"
-        input_files = { "arg": [1 2 3] }
-        out_file = "fname"
-
-        the bag server will then a temporary file for arg and fname, write
-        the list [1 2 3] into the file for arg, call Virtuoso, then read
-        the output file fname and return the result.
-
-        Parameters
-        ----------
-        expr : string
-            the skill expression to evaluate.
-        input_files : dict[string, any] or None
-            A dictionary of input files content.
-        out_file : string or None
-            the output file name argument in expr.
-
-        Returns
-        -------
-        result : str
-            a string representation of the result.
-
-        Raises
-        ------
-        :class: `.VirtuosoException` :
-            if virtuoso encounters errors while evaluating the expression.
-        """
-        request = dict(
-            type='skill',
-            expr=expr,
-            input_files=input_files,
-            out_file=out_file,
-        )
-
-        reply = self.send(request)
-        return handle_reply(reply)
 
     def get_exit_object(self) -> Any:
         return {'type': 'exit'}
@@ -221,34 +140,6 @@ class SkillInterface(DbAccess):
         lib_path = lib_path or self.default_lib_path
         tech_lib = self.db_config['schematic']['tech_lib']
 
-        # if cybagoa is not None and self.db_config['schematic'].get('use_cybagoa', False):
-        #     cds_lib_path = os.environ.get('CDS_LIB_PATH', './cds.lib')
-        #     sch_name = 'schematic'
-        #     sym_name = 'symbol'
-        #     encoding = get_encoding()
-        #     # release write locks
-        #     cell_view_list = []
-        #     for _, _, cell_name in template_list:
-        #         cell_view_list.append((cell_name, sch_name))
-        #         cell_view_list.append((cell_name, sym_name))
-        #     self.release_write_locks(lib_name, cell_view_list)
-        #
-        #     # create library in case it doesn't exist
-        #     self.create_library(lib_name, lib_path)
-        #
-        #     # write schematic
-        #     with cybagoa.PyOASchematicWriter(cds_lib_path, lib_name, encoding) as writer:
-        #         for temp_info, change_info in zip(template_list, change_list):
-        #             sch_cell = cybagoa.PySchCell(temp_info[0], temp_info[1], temp_info[2], encoding)
-        #             for old_pin, new_pin in change_info['pin_map']:
-        #                 sch_cell.rename_pin(old_pin, new_pin)
-        #             for inst_name, rinst_list in change_info['inst_list']:
-        #                 sch_cell.add_inst(inst_name, lib_name, rinst_list)
-        #             writer.add_sch_cell(sch_cell)
-        #         writer.create_schematics(sch_name, sym_name)
-        #
-        #     copy = 'nil'
-        # else:
         copy = "'t"
 
         in_files = {'template_list': template_list,
@@ -420,7 +311,7 @@ class SkillInterface(DbAccess):
             self._eval_skill(cmd)
         else:
             # get netlists to copy
-            netlist_dir = os.path.dirname(netlist)
+            netlist_dir = Path(netlist).parent
             netlist_files = self.checker.get_rcx_netlists(lib_name, cell_name)
             if not netlist_files:
                 # some error checking.  Shouldn't be needed but just in case
@@ -428,20 +319,17 @@ class SkillInterface(DbAccess):
 
             # copy netlists to a "netlist" subfolder in the CAD database
             cell_dir = self.get_cell_directory(lib_name, cell_name)
-            targ_dir = os.path.join(cell_dir, 'netlist')
-            os.makedirs(targ_dir, exist_ok=True)
+            targ_dir = cell_dir / 'netlist'
+            targ_dir.mkdir(exist_ok=True)
             for fname in netlist_files:
-                shutil.copy(os.path.join(netlist_dir, fname), targ_dir)
+                shutil.copy(netlist_dir / fname, targ_dir)
 
             # create symbolic link as aliases
-            symlink = os.path.join(targ_dir, 'netlist')
-            try:
-                os.remove(symlink)
-            except FileNotFoundError:
-                pass
-            os.symlink(netlist_files[0], symlink)
+            symlink = targ_dir / 'netlist'
+            symlink.unlink(missing_ok=True)
+            symlink.symlink_to(netlist_files[0])
 
-    def get_cell_directory(self, lib_name: str, cell_name: str) -> str:
+    def get_cell_directory(self, lib_name: str, cell_name: str) -> Path:
         """Returns the directory name of the given cell.
 
         Parameters
@@ -453,14 +341,13 @@ class SkillInterface(DbAccess):
 
         Returns
         -------
-        cell_dir : str
+        cell_dir : Path
             path to the cell directory.
         """
-        # use yaml.load to remove outermost quotation marks
-        lib_dir = to_yaml_str(read_yaml_str(self._eval_skill('get_lib_directory( "%s" )' % lib_name)))
+        lib_dir = to_yaml_str(read_yaml_str(self._eval_skill(f'get_lib_directory( "{lib_name}" )')))
         if not lib_dir:
-            raise ValueError('Library %s not found.' % lib_name)
-        return os.path.join(lib_dir, cell_name)
+            raise ValueError(f'Library {lib_name} not found.')
+        return Path(lib_dir) / cell_name
 
     def create_verilog_view(self, verilog_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> None:
         # delete old verilog view
@@ -470,63 +357,60 @@ class SkillInterface(DbAccess):
         self._eval_skill(cmd)
 
     def import_sch_cellview(self, lib_name: str, cell_name: str, view_name: str) -> None:
-        self._import_design(lib_name, cell_name, view_name, set())
+        if lib_name not in self.lib_path_map:
+            self.add_sch_library(lib_name)
+
+        cell_list = []
+        self._import_design(lib_name, cell_name, view_name, cell_list)
+
+        # create python templates
+        self._create_sch_templates(cell_list)
 
     def import_design_library(self, lib_name: str, view_name: str) -> None:
-        imported_cells = set()
+        if lib_name not in self.lib_path_map:
+            self.add_sch_library(lib_name)
+
+        cell_list = []
         for cell_name in self.get_cells_in_library(lib_name):
-            self._import_design(lib_name, cell_name, view_name, imported_cells)
+            self._import_design(lib_name, cell_name, view_name, cell_list)
+
+        # create python templates
+        self._create_sch_templates(cell_list)
 
     def import_gds_file(self, gds_fname: str, lib_name: str, layer_map: str, obj_map: str,
                         grid: RoutingGrid) -> None:
         raise NotImplementedError
 
-    def _import_design(self, lib_name: str, cell_name: str, view_name: str, imported_cells: Set[str]) -> None:
-        """Recursive helper for import_design_library.
+    def _import_design(self, lib_name: str, cell_name: str, view_name: str, cell_list: List[Tuple[str, str]]) -> None:
+        """Recursive helper for import_design_library and import_sch_cellview.
         """
-        raise NotImplementedError
-        # TODO: required dsn_db and new_lib_path in BAG2
-        # # check if we already imported this schematic
-        # key = '%s__%s' % (lib_name, cell_name)
-        # if key in imported_cells:
-        #     return
-        # imported_cells.add(key)
-        #
-        # # create root directory if missing
-        # root_path = dsn_db.get_library_path(lib_name)
-        # if not root_path:
-        #     root_path = new_lib_path
-        #     dsn_db.append_library(lib_name, new_lib_path)
-        #
-        # package_path = os.path.join(root_path, lib_name)
-        # python_file = os.path.join(package_path, '%s.py' % cell_name)
-        # yaml_file = os.path.join(package_path, 'netlist_info', '%s.yaml' % cell_name)
-        # yaml_dir = os.path.dirname(yaml_file)
-        # if not os.path.exists(yaml_dir):
-        #     os.makedirs(yaml_dir)
-        #     write_file(os.path.join(package_path, '__init__.py'), '\n', mkdir=False)
-        #
-        # # update netlist file
-        # content = self.parse_schematic_template(lib_name, cell_name)
-        # sch_info = read_yaml_str(content)
-        # try:
-        #     write_file(yaml_file, content)
-        # except IOError:
-        #     print('Warning: cannot write to %s.' % yaml_file)
-        #
-        # # generate new design module file if necessary.
-        # if not os.path.exists(python_file):
-        #     content = self.get_python_template(lib_name, cell_name,
-        #                                        self.db_config.get('prim_table', {}))
-        #     write_file(python_file, content + '\n', mkdir=False)
-        #
-        # # recursively import all children
-        # for inst_name, inst_attrs in sch_info['instances'].items():
-        #     inst_lib_name = inst_attrs['lib_name']
-        #     if inst_lib_name not in self.exc_libs:
-        #         inst_cell_name = inst_attrs['cell_name']
-        #         self._import_design(inst_lib_name, inst_cell_name, imported_cells, dsn_db,
-        #                             new_lib_path)
+        # check if we already imported this schematic
+        key = (lib_name, cell_name)
+        if key in cell_list:
+            return
+        cell_list.append(key)
+
+        root_path = Path(self.lib_path_map[lib_name])
+        yaml_file = root_path / 'netlist_info' / f'{cell_name}.yaml'
+        if not yaml_file.parent.exists():
+            yaml_file.parent.mkdir(exist_ok=True)
+            write_file(root_path / '__init__.py', '\n', mkdir=False)
+
+        # update netlist file
+        content = self.parse_schematic_template(lib_name, cell_name)
+        sch_info = read_yaml_str(content)
+        try:
+            write_file(yaml_file, content)
+        except IOError:
+            print(f'Warning: cannot write to {yaml_file}.')
+
+        # recursively import all children
+        for inst_name, inst_attrs in sch_info['instances'].items():
+            inst_lib_name = inst_attrs['lib_name']
+            if inst_lib_name not in self.exc_libs:
+                inst_cell_name = inst_attrs['cell_name']
+                if (inst_lib_name, inst_cell_name) not in cell_list:
+                    self._import_design(inst_lib_name, inst_cell_name, view_name, cell_list)
 
     def parse_schematic_template(self, lib_name: str, cell_name: str) -> str:
         """Parse the given schematic template.
@@ -601,7 +485,7 @@ class SkillInterface(DbAccess):
             _name, _num = sub_str.split(' ')
             _num = int(_num)
             if _num < 0:
-                _num += 4294967296
+                _num += drawing_purp + 1
             purp_dict[_num] = _name[1:-1]   # indexing by number so that the dict can be sorted before printing
 
         # write to yaml

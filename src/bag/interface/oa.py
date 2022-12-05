@@ -55,10 +55,8 @@ from pathlib import Path
 # from pybag.core import PyOADatabase, make_tr_colors
 from pybag.core import make_tr_colors
 
-from ..io.file import write_file
 from ..layout.routing.grid import RoutingGrid
 from .database import DbAccess
-from .skill import handle_reply
 
 if TYPE_CHECKING:
     from .zmqwrapper import ZMQDealer
@@ -89,58 +87,6 @@ class OAInterface(DbAccess):
         """Override; register yaml path in PyOADatabase too."""
         lib_path = DbAccess.add_sch_library(self, lib_name)
         # self._oa_db.add_yaml_path(lib_name, str(lib_path / 'netlist_info'))
-
-    def _eval_skill(self, expr: str, input_files: Optional[Dict[str, Any]] = None,
-                    out_file: Optional[str] = None) -> str:
-        """Send a request to evaluate the given skill expression.
-
-        Because Virtuoso has a limit on the input/output data (< 4096 bytes),
-        if your input is large, you need to write it to a file and have
-        Virtuoso open the file to parse it.  Similarly, if you expect a
-        large output, you need to make Virtuoso write the result to the
-        file, then read it yourself.  The parameters input_files and
-        out_file help you achieve this functionality.
-
-        For example, if you need to evaluate "skill_fun(arg fname)", where
-        arg is a file containing the list [1 2 3], and fname is the output
-        file name, you will call this function with:
-
-        expr = "skill_fun({arg} {fname})"
-        input_files = { "arg": [1 2 3] }
-        out_file = "fname"
-
-        the bag server will then a temporary file for arg and fname, write
-        the list [1 2 3] into the file for arg, call Virtuoso, then read
-        the output file fname and return the result.
-
-        Parameters
-        ----------
-        expr :
-            the skill expression to evaluate.
-        input_files :
-            A dictionary of input files content.
-        out_file :
-            the output file name argument in expr.
-
-        Returns
-        -------
-        result :
-            a string representation of the result.
-
-        Raises
-        ------
-        VirtuosoException :
-            if virtuoso encounters errors while evaluating the expression.
-        """
-        request = dict(
-            type='skill',
-            expr=expr,
-            input_files=input_files,
-            out_file=out_file,
-        )
-
-        reply = self.send(request)
-        return handle_reply(reply)
 
     def close(self) -> None:
         DbAccess.close(self)
@@ -295,11 +241,3 @@ class OAInterface(DbAccess):
         tr_colors = make_tr_colors(grid.tech_info)
         # self._oa_db.import_gds(gds_fname, lib_name, layer_map, obj_map, grid, tr_colors)
         raise NotImplementedError
-
-    def _create_sch_templates(self, cell_list: List[Tuple[str, str]]) -> None:
-        for lib, cell in cell_list:
-            python_file = Path(self.lib_path_map[lib]) / (cell + '.py')
-            if not python_file.exists():
-                content = self.get_python_template(lib, cell,
-                                                   self.db_config.get('prim_table', {}))
-                write_file(python_file, content, mkdir=False)

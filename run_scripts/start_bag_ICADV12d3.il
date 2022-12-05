@@ -130,6 +130,92 @@ procedure( parse_data_from_file_helper( p )
 )
 
 
+; Parse the netlist of the given cellview.
+; Works on schematic and veriloga.
+procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
+    let( (cv cell_type p indent direction term_names tb_list tb_match
+          inst_lib_name inst_cell_name inst_cnt)
+        indent = ""
+        cell_type = "schematic"
+        unless( cv = dbOpenCellViewByType( lib_name cell_name "schematic" nil "r" )
+            cell_type = "veriloga"
+            unless( cv = dbOpenCellViewByType( lib_name cell_name "veriloga" nil "r" )
+                error( "Cannot find schematic or veriloga view of cell %s__%s" lib_name cell_name )
+            )
+        )
+        p = outfile( file_name "w" )
+
+        ; print cellview information
+        printf( "*INFO* Writing cell %s__%s (%s) netlist to %s\n" lib_name cell_name cell_type file_name )
+        fprintf( p "%slib_name: %s\n" indent lib_name )
+        fprintf( p "%scell_name: %s\n" indent cell_name )
+        fprintf( p "%sview_name: %s\n" indent cell_type )
+
+        ; print bbox
+
+        ; print terminals
+        fprintf( p "%sterminals:\n" indent )
+        foreach( term cv~>terminals
+            ; print entry for terminal
+            indent = "  "
+            fprintf( p "%s%s:\n" indent term~>name )
+            ; print terminal information
+            indent = "    "
+            fprintf( p "%sobj:\n" indent )
+            indent = "      "
+            fprintf( p "%s- inst:\n" indent )
+            indent = "          "
+            fprintf( p "%sconnections: {}\n" indent )
+            fprintf( p "%sparams: {}\n" indent )
+            fprintf( p "%sis_primitive: true\n" indent )
+        )
+
+        ; print shapes
+
+        ; print instances
+        indent = ""
+        if( not(cv~>instances) then
+            fprintf( p "%sinstances: {}\n" indent )
+        else
+            inst_cnt = 0
+            fprintf( p "%sinstances:\n" indent )
+            foreach( inst cv~>instances
+                inst_cnt++
+                ; print entry for instance
+                indent = "  "
+                fprintf( p "%s%s:\n" indent inst~>name )
+                ; print instance master information.
+                indent = "    "
+                fprintf( p "%slib_name: %s\n" indent inst~>libName )
+                fprintf( p "%scell_name: %s\n" indent inst~>cellName )
+                ; print instance terminal information
+                if( !(inst~>instTerms) then
+                    fprintf( p "%sconnections: {}\n" indent )
+                else
+                    fprintf( p "%sconnections:\n" indent )
+                    foreach( inst_term inst~>instTerms
+                        unless( direction = inst_term~>direction
+                            direction = ""
+                        )
+                        indent = "      "
+                        fprintf( p "%s%s: %s\n" indent inst_term~>name inst_term~>net~>name )
+                    )
+                )
+                indent = "    "
+                fprintf( p "%sparams: {}\n" indent )
+            )
+            when(inst_cnt == 0
+                fprintf( p "  {}\n" )
+            )
+        )
+
+        ; close resources
+        close(p)
+        dbClose(cv)
+    )
+)
+
+
 ; close all opened cellviews
 procedure( close_all_cellviews()
     foreach( cv dbGetOpenCellViews()
