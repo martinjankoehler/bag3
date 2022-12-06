@@ -581,13 +581,14 @@ class SkillInterface(DbAccess):
               'laylist)) laylist)'
         dlay_str = self._eval_skill(cmd)[2:-2]
 
-        all_lay_str = lay_str + ') (' + dlay_str
+        # Check if we have any derived layers
+        all_lay_str = lay_str
+        if dlay_str:
+            all_lay_str += ') (' + dlay_str  # Trick to include derived layres
 
         lay_dict = {}
         via_keys = list(via_id_dict.keys())
         for sub_str in all_lay_str.split(') ('):
-            if not sub_str:  # blank edge case
-                continue 
             _name, _num = sub_str.split(' ')
             _name = _name[1:-1]
             _num = int(_num)
