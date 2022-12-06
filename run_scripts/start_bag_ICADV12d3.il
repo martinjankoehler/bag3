@@ -134,7 +134,7 @@ procedure( parse_data_from_file_helper( p )
 ; Works on schematic and veriloga.
 procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
     let( (cv cell_type p indent direction term_names tb_list tb_match
-          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive)
+          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive xform_idx )
         indent = ""
         cell_type = "schematic"
         unless( cv = dbOpenCellViewByType( lib_name cell_name "schematic" nil "r" )
@@ -152,8 +152,16 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
         fprintf( p "%sview_name: %s\n" indent cell_type )
 
         ; print bbox
+        fprintf( p "%sbbox:\n" indent )
+        indent = "  "
+        foreach( pair cv~>bBox
+            foreach( elem pair
+                fprintf( p "%s- %d\n" indent round(elem*160) )
+            )
+        )
 
         ; print terminals
+        indent = ""
         fprintf( p "%sterminals:\n" indent )
         ; use cv~>instances instead of cv~>terminals since the first has more information
         foreach( inst cv~>instances
@@ -199,6 +207,29 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
                 fprintf( p "%slib_name: %s\n" indent inst~>libName )
                 fprintf( p "%scell_name: %s\n" indent inst~>cellName )
                 fprintf( p "%sview_name: %s\n" indent inst~>viewName )
+
+                fprintf( p "%sxform: \n" indent )
+                xform_idx = 0
+                foreach( xf inst~>transform
+                    if(xform_idx == 1 then
+                        fprintf( p "%s  - %s\n" indent xf)
+                    else if(xform_idx == 0 then
+                        foreach( xy xf
+                            fprintf( p "%s  - %d\n" indent round(xy*160))
+                        )
+                    )
+                    )
+                    xform_idx++
+                )
+
+                ; print bbox
+                fprintf( p "%sbbox:\n" indent )
+                foreach( pair inst~>bBox
+                    foreach( elem pair
+                        fprintf( p "%s  - %d\n" indent round(elem*160) )
+                    )
+                )
+
                 fprintf( p "%sconnections: {}\n" indent )
                 fprintf( p "%sparams: {}\n" indent )
                 fprintf( p "%sis_primitive: %s\n" indent is_primitive )
@@ -233,6 +264,29 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
                 fprintf( p "%slib_name: %s\n" indent inst~>libName )
                 fprintf( p "%scell_name: %s\n" indent inst~>cellName )
                 fprintf( p "%sview_name: %s\n" indent inst~>viewName )
+
+                fprintf( p "%sxform: \n" indent )
+                xform_idx = 0
+                foreach( xf inst~>transform
+                    if(xform_idx == 1 then
+                        fprintf( p "%s  - %s\n" indent xf)
+                    else if(xform_idx == 0 then
+                        foreach( xy xf
+                            fprintf( p "%s  - %d\n" indent round(xy*160))
+                        )
+                    )
+                    )
+                    xform_idx++
+                )
+
+                ; print bbox
+                fprintf( p "%sbbox:\n" indent )
+                foreach( pair inst~>bBox
+                    foreach( elem pair
+                        fprintf( p "%s  - %d\n" indent round(elem*160) )
+                    )
+                )
+
                 ; print instance terminal information
                 if( !(inst~>instTerms) then
                     fprintf( p "%sconnections: {}\n" indent )
