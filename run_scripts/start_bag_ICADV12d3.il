@@ -134,7 +134,7 @@ procedure( parse_data_from_file_helper( p )
 ; Works on schematic and veriloga.
 procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
     let( (cv cell_type p indent direction term_names tb_list tb_match
-          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type)
+          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive)
         indent = ""
         cell_type = "schematic"
         unless( cv = dbOpenCellViewByType( lib_name cell_name "schematic" nil "r" )
@@ -155,49 +155,76 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
 
         ; print terminals
         fprintf( p "%sterminals:\n" indent )
-        foreach( term cv~>terminals
-            if(term~>direction == "inputOutput" then
-                term_cell_name = "iopin"
-                term_type = 2
-            else if(term~>direction == "input" then
-                term_cell_name = "ipin"
-                term_type = 0
-            else
-                term_cell_name = "opin"
-                term_type = 1
-            )
-            )
+        ; use cv~>instances instead of cv~>terminals since the first has more information
+        foreach( inst cv~>instances
+            if(inst~>purpose == "pin" then
+                ; get ttype
+                if(inst~>cellName == "iopin" then
+                    term_type = 2
+                else if(inst~>cellName == "ipin" then
+                    term_type = 0
+                else
+                    ; inst~>cellName == "opin"
+                    term_type = 1
+                    )
+                )
 
-            ; print entry for terminal
-            indent = "  "
-            fprintf( p "%s%s:\n" indent term~>name )
-            ; print terminal information
-            indent = "    "
-            fprintf( p "%sobj:\n" indent )
-            indent = "      "
-            fprintf( p "%s- inst:\n" indent )
-            indent = "          "
-            fprintf( p "%slib_name: basic\n" indent )
-            fprintf( p "%scell_name: %s\n" indent term_cell_name )
-            fprintf( p "%sconnections: {}\n" indent )
-            fprintf( p "%sparams: {}\n" indent )
-            fprintf( p "%sis_primitive: true\n" indent )
-            indent = "    "
-            fprintf( p "%sttype: %d\n" indent term_type )
+                ; get stype
+                if(inst~>net~>sigType == "signal" then
+                    sig_type = 0
+                else if(inst~>net~>sigType == "supply" then
+                    sig_type = 1
+                else
+                    ; inst~>net~>sigType == "ground"
+                    sig_type = 2
+                    )
+                )
+
+                ; get is_primitive
+                if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
+                    is_primitive = "true"
+                else
+                    is_primitive = "false"
+                )
+
+                ; print entry for terminal
+                indent = "  "
+                fprintf( p "%s%s:\n" indent inst~>net~>name )
+                ; print terminal information
+                indent = "    "
+                fprintf( p "%sobj:\n" indent )
+                indent = "      "
+                fprintf( p "%s- inst:\n" indent )
+                indent = "          "
+                fprintf( p "%slib_name: %s\n" indent inst~>libName )
+                fprintf( p "%scell_name: %s\n" indent inst~>cellName )
+                fprintf( p "%sview_name: %s\n" indent inst~>viewName )
+                fprintf( p "%sconnections: {}\n" indent )
+                fprintf( p "%sparams: {}\n" indent )
+                fprintf( p "%sis_primitive: %s\n" indent is_primitive )
+                indent = "    "
+                fprintf( p "%sstype: %d\n" indent sig_type )
+                fprintf( p "%sttype: %d\n" indent term_type )
+            )
         )
 
         ; print shapes
 
         ; print instances
         indent = ""
-        if( not(cv~>instances) then
-            fprintf( p "%sinstances: {}\n" indent )
-        else
-            inst_cnt = 0
-            fprintf( p "%sinstances:\n" indent )
-            foreach( inst cv~>instances
-              if(inst~>purpose != "pin" then
+        inst_cnt = 0
+        fprintf( p "%sinstances:\n" indent )
+        foreach( inst cv~>instances
+            if(inst~>purpose != "pin" then
                 inst_cnt++
+
+                ; get is_primitive
+                if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
+                    is_primitive = "true"
+                else
+                    is_primitive = "false"
+                )
+
                 ; print entry for instance
                 indent = "  "
                 fprintf( p "%s%s:\n" indent inst~>name )
@@ -221,11 +248,11 @@ procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
                 )
                 indent = "    "
                 fprintf( p "%sparams: {}\n" indent )
-              )
+                fprintf( p "%sis_primitive: %s\n" indent is_primitive )
             )
-            when(inst_cnt == 0
-                fprintf( p "  {}\n" )
-            )
+        )
+        when(inst_cnt == 0
+            fprintf( p "  {}\n" )
         )
 
         ; close resources
