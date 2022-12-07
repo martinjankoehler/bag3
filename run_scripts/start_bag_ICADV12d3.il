@@ -131,187 +131,237 @@ procedure( parse_data_from_file_helper( p )
 
 
 ; Parse the netlist of the given cellview.
-; Works on schematic and veriloga.
-procedure( parse_cad_sch(lib_name cell_name file_name "ttt")
-    let( (cv cell_type p indent direction term_names tb_list tb_match
-          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive xform_idx )
-        indent = ""
-        cell_type = "schematic"
-        unless( cv = dbOpenCellViewByType( lib_name cell_name "schematic" nil "r" )
-            cell_type = "veriloga"
-            unless( cv = dbOpenCellViewByType( lib_name cell_name "veriloga" nil "r" )
-                error( "Cannot find schematic or veriloga view of cell %s__%s" lib_name cell_name )
+; Works on schematic and veriloga and symbol.
+procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
+    let( (skip cv p indent direction term_names tb_list tb_match
+          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive xform_idx prop_cnt)
+        skip = 0
+        if(view_name == "schematic" then
+            unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
+                view_name = "veriloga"
+                unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
+                    error( "Cannot find schematic or veriloga view of cell %s__%s" lib_name cell_name )
+                )
+            )
+        else
+            unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
+                skip = 1
             )
         )
-        p = outfile( file_name "w" )
+        if(skip == 0 then
+            indent = ""
+            p = outfile( file_name "w" )
 
-        ; print cellview information
-        printf( "*INFO* Writing cell %s__%s (%s) netlist to %s\n" lib_name cell_name cell_type file_name )
-        fprintf( p "%slib_name: %s\n" indent lib_name )
-        fprintf( p "%scell_name: %s\n" indent cell_name )
-        fprintf( p "%sview_name: %s\n" indent cell_type )
+            ; print cellview information
+            printf( "*INFO* Writing cell %s__%s (%s) netlist to %s\n" lib_name cell_name view_name file_name )
+            fprintf( p "%slib_name: %s\n" indent lib_name )
+            fprintf( p "%scell_name: %s\n" indent cell_name )
+            fprintf( p "%sview_name: %s\n" indent view_name )
 
-        ; print bbox
-        fprintf( p "%sbbox:\n" indent )
-        indent = "  "
-        foreach( pair cv~>bBox
-            foreach( elem pair
-                fprintf( p "%s- %d\n" indent round(elem*160) )
+            ; print bbox
+            fprintf( p "%sbbox:\n" indent )
+            indent = "  "
+            foreach( pair cv~>bBox
+                foreach( elem pair
+                    fprintf( p "%s- %d\n" indent round(elem*160) )
+                )
             )
-        )
 
-        ; print terminals
-        indent = ""
-        fprintf( p "%sterminals:\n" indent )
-        ; use cv~>instances instead of cv~>terminals since the first has more information
-        foreach( inst cv~>instances
-            if(inst~>purpose == "pin" then
-                ; get ttype
-                if(inst~>cellName == "iopin" then
-                    term_type = 2
-                else if(inst~>cellName == "ipin" then
-                    term_type = 0
-                else
-                    ; inst~>cellName == "opin"
-                    term_type = 1
-                    )
-                )
-
-                ; get stype
-                if(inst~>net~>sigType == "signal" then
-                    sig_type = 0
-                else if(inst~>net~>sigType == "supply" then
-                    sig_type = 1
-                else
-                    ; inst~>net~>sigType == "ground"
-                    sig_type = 2
-                    )
-                )
-
-                ; get is_primitive
-                if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
-                    is_primitive = "true"
-                else
-                    is_primitive = "false"
-                )
-
-                ; print entry for terminal
-                indent = "  "
-                fprintf( p "%s%s:\n" indent inst~>net~>name )
-                ; print terminal information
-                indent = "    "
-                fprintf( p "%sobj:\n" indent )
-                indent = "      "
-                fprintf( p "%s- inst:\n" indent )
-                indent = "          "
-                fprintf( p "%slib_name: %s\n" indent inst~>libName )
-                fprintf( p "%scell_name: %s\n" indent inst~>cellName )
-                fprintf( p "%sview_name: %s\n" indent inst~>viewName )
-
-                fprintf( p "%sxform: \n" indent )
-                xform_idx = 0
-                foreach( xf inst~>transform
-                    if(xform_idx == 1 then
-                        fprintf( p "%s  - %s\n" indent xf)
-                    else if(xform_idx == 0 then
-                        foreach( xy xf
-                            fprintf( p "%s  - %d\n" indent round(xy*160))
+            ; print terminals
+            indent = ""
+            fprintf( p "%sterminals:\n" indent )
+            if(view_name == "symbol" then
+                foreach( term cv~>terminals
+                    ; print entry for terminal
+                    indent = "  "
+                    fprintf( p "%s%s:\n" indent term~>name )
+                    ; print terminal information
+                    indent = "    "
+                    fprintf( p "%sobj:\n" indent )
+                    indent = "      "
+                    fprintf( p "%s- net: \"\"\n" indent )
+                    indent = "    "
+                    ; get ttype
+                    if(term~>direction == "inputOutput" then
+                        term_type = 2
+                    else if(term~>direction == "input" then
+                        term_type = 0
+                    else
+                        ; term~>direction == "output"
+                        term_type = 1
                         )
                     )
-                    )
-                    xform_idx++
+                    fprintf( p "%sttype: %d\n" indent term_type )
                 )
-
-                ; print bbox
-                fprintf( p "%sbbox:\n" indent )
-                foreach( pair inst~>bBox
-                    foreach( elem pair
-                        fprintf( p "%s  - %d\n" indent round(elem*160) )
-                    )
-                )
-
-                fprintf( p "%sconnections: {}\n" indent )
-                fprintf( p "%sparams: {}\n" indent )
-                fprintf( p "%sis_primitive: %s\n" indent is_primitive )
-                indent = "    "
-                fprintf( p "%sstype: %d\n" indent sig_type )
-                fprintf( p "%sttype: %d\n" indent term_type )
-            )
-        )
-
-        ; print shapes
-
-        ; print instances
-        indent = ""
-        inst_cnt = 0
-        fprintf( p "%sinstances:\n" indent )
-        foreach( inst cv~>instances
-            if(inst~>purpose != "pin" then
-                inst_cnt++
-
-                ; get is_primitive
-                if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
-                    is_primitive = "true"
-                else
-                    is_primitive = "false"
-                )
-
-                ; print entry for instance
-                indent = "  "
-                fprintf( p "%s%s:\n" indent inst~>name )
-                ; print instance master information.
-                indent = "    "
-                fprintf( p "%slib_name: %s\n" indent inst~>libName )
-                fprintf( p "%scell_name: %s\n" indent inst~>cellName )
-                fprintf( p "%sview_name: %s\n" indent inst~>viewName )
-
-                fprintf( p "%sxform: \n" indent )
-                xform_idx = 0
-                foreach( xf inst~>transform
-                    if(xform_idx == 1 then
-                        fprintf( p "%s  - %s\n" indent xf)
-                    else if(xform_idx == 0 then
-                        foreach( xy xf
-                            fprintf( p "%s  - %d\n" indent round(xy*160))
-                        )
-                    )
-                    )
-                    xform_idx++
-                )
-
-                ; print bbox
-                fprintf( p "%sbbox:\n" indent )
-                foreach( pair inst~>bBox
-                    foreach( elem pair
-                        fprintf( p "%s  - %d\n" indent round(elem*160) )
-                    )
-                )
-
-                ; print instance terminal information
-                if( !(inst~>instTerms) then
-                    fprintf( p "%sconnections: {}\n" indent )
-                else
-                    fprintf( p "%sconnections:\n" indent )
-                    foreach( inst_term inst~>instTerms
-                        unless( direction = inst_term~>direction
-                            direction = ""
-                        )
+            else
+                ; use cv~>instances instead of cv~>terminals since the first has more information
+                foreach( inst cv~>instances
+                    if(inst~>purpose == "pin" then
+                        ; print entry for terminal
+                        indent = "  "
+                        fprintf( p "%s%s:\n" indent inst~>net~>name )
+                        ; print terminal information
+                        indent = "    "
+                        fprintf( p "%sobj:\n" indent )
                         indent = "      "
-                        fprintf( p "%s%s: %s\n" indent inst_term~>name inst_term~>net~>name )
+                        fprintf( p "%s- inst:\n" indent )
+                        indent = "          "
+                        fprintf( p "%slib_name: %s\n" indent inst~>libName )
+                        fprintf( p "%scell_name: %s\n" indent inst~>cellName )
+                        fprintf( p "%sview_name: %s\n" indent inst~>viewName )
+
+                        fprintf( p "%sxform:\n" indent )
+                        xform_idx = 0
+                        foreach( xf inst~>transform
+                            if(xform_idx == 1 then
+                                fprintf( p "%s  - %s\n" indent xf)
+                            else if(xform_idx == 0 then
+                                foreach( xy xf
+                                    fprintf( p "%s  - %d\n" indent round(xy*160))
+                                )
+                            )
+                            )
+                            xform_idx++
+                        )
+
+                        ; print bbox
+                        fprintf( p "%sbbox:\n" indent )
+                        foreach( pair inst~>bBox
+                            foreach( elem pair
+                                fprintf( p "%s  - %d\n" indent round(elem*160) )
+                            )
+                        )
+
+                        fprintf( p "%sconnections: {}\n" indent )
+                        fprintf( p "%sparams: {}\n" indent )
+
+                        ; get is_primitive
+                        if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
+                            is_primitive = "true"
+                        else
+                            is_primitive = "false"
+                        )
+                        fprintf( p "%sis_primitive: %s\n" indent is_primitive )
+
+                        indent = "    "
+                        ; get stype
+                        if(inst~>net~>sigType == "signal" then
+                            sig_type = 0
+                        else if(inst~>net~>sigType == "supply" then
+                            sig_type = 1
+                        else
+                            ; inst~>net~>sigType == "ground"
+                            sig_type = 2
+                            )
+                        )
+                        fprintf( p "%sstype: %d\n" indent sig_type )
+
+                        ; get ttype
+                        if(inst~>cellName == "iopin" then
+                            term_type = 2
+                        else if(inst~>cellName == "ipin" then
+                            term_type = 0
+                        else
+                            ; inst~>cellName == "opin"
+                            term_type = 1
+                            )
+                        )
+                        fprintf( p "%sttype: %d\n" indent term_type )
                     )
                 )
-                indent = "    "
-                fprintf( p "%sparams: {}\n" indent )
-                fprintf( p "%sis_primitive: %s\n" indent is_primitive )
             )
-        )
-        when(inst_cnt == 0
-            fprintf( p "  {}\n" )
-        )
 
-        ; close resources
-        close(p)
-        dbClose(cv)
+            ; print shapes
+
+            ; print instances
+            indent = ""
+            inst_cnt = 0
+            fprintf( p "%sinstances:\n" indent )
+            foreach( inst cv~>instances
+                if(inst~>purpose != "pin" then
+                    inst_cnt++
+
+                    ; get is_primitive
+                    if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
+                        is_primitive = "true"
+                    else
+                        is_primitive = "false"
+                    )
+
+                    ; print entry for instance
+                    indent = "  "
+                    fprintf( p "%s%s:\n" indent inst~>name )
+                    ; print instance master information.
+                    indent = "    "
+                    fprintf( p "%slib_name: %s\n" indent inst~>libName )
+                    fprintf( p "%scell_name: %s\n" indent inst~>cellName )
+                    fprintf( p "%sview_name: %s\n" indent inst~>viewName )
+
+                    fprintf( p "%sxform:\n" indent )
+                    xform_idx = 0
+                    foreach( xf inst~>transform
+                        if(xform_idx == 1 then
+                            fprintf( p "%s  - %s\n" indent xf)
+                        else if(xform_idx == 0 then
+                            foreach( xy xf
+                                fprintf( p "%s  - %d\n" indent round(xy*160))
+                            )
+                        )
+                        )
+                        xform_idx++
+                    )
+
+                    ; print bbox
+                    fprintf( p "%sbbox:\n" indent )
+                    foreach( pair inst~>bBox
+                        foreach( elem pair
+                            fprintf( p "%s  - %d\n" indent round(elem*160) )
+                        )
+                    )
+
+                    ; print instance terminal information
+                    if( !(inst~>instTerms) then
+                        fprintf( p "%sconnections: {}\n" indent )
+                    else
+                        fprintf( p "%sconnections:\n" indent )
+                        foreach( inst_term inst~>instTerms
+                            unless( direction = inst_term~>direction
+                                direction = ""
+                            )
+                            indent = "      "
+                            fprintf( p "%s%s: %s\n" indent inst_term~>name inst_term~>net~>name )
+                        )
+                    )
+                    indent = "    "
+
+                    ; print params
+                    fprintf( p "%sparams:\n" indent )
+                    prop_cnt = 0
+                    foreach(param inst~>prop
+                        fprintf( p "%s  %s:\n" indent param~>name )
+                        fprintf( p "%s    - 3\n" indent ) ; enum for string
+                        if(param~>value == "" then
+                            fprintf( p "%s    - \"\"\n" indent )
+                        else
+                            fprintf( p "%s    - %s\n" indent param~>value )
+                        )
+                        prop_cnt++
+                    )
+                    when(prop_cnt == 0
+                        fprintf( p "%s  {}\n" indent )
+                    )
+
+                    fprintf( p "%sis_primitive: %s\n" indent is_primitive )
+                )
+            )
+            when(inst_cnt == 0
+                fprintf( p "  {}\n" )
+            )
+
+            ; close resources
+            close(p)
+            dbClose(cv)
+        )
     )
 )
 

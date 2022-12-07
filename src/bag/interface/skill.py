@@ -392,27 +392,31 @@ class SkillInterface(DbAccess):
 
         root_path = Path(self.lib_path_map[lib_name])
         yaml_file = root_path / 'netlist_info' / f'{cell_name}.yaml'
+        yaml_sym_file = root_path / 'netlist_info' / f'{cell_name}.symbol.yaml'
         if not yaml_file.parent.exists():
             yaml_file.parent.mkdir(exist_ok=True)
             write_file(root_path / '__init__.py', '\n', mkdir=False)
 
         # update netlist file
-        content = self.parse_schematic_template(lib_name, cell_name)
-        sch_info = read_yaml_str(content)
-        try:
-            write_file(yaml_file, content)
-        except IOError:
-            print(f'Warning: cannot write to {yaml_file}.')
+        for view_name, _yaml in [('schematic', yaml_file), ('symbol', yaml_sym_file)]:
+            content = self.parse_schematic_template(lib_name, cell_name, view_name)
+            sch_info = read_yaml_str(content)
+            if sch_info:
+                try:
+                    write_file(_yaml, content)
+                except IOError:
+                    print(f'Warning: cannot write to {_yaml}.')
 
-        # recursively import all children
-        for inst_name, inst_attrs in sch_info['instances'].items():
-            inst_lib_name = inst_attrs['lib_name']
-            if inst_lib_name not in self.exc_libs:
-                inst_cell_name = inst_attrs['cell_name']
-                if (inst_lib_name, inst_cell_name) not in cell_list:
-                    self._import_design(inst_lib_name, inst_cell_name, view_name, cell_list)
+            if view_name == 'schematic':
+                # recursively import all children
+                for inst_name, inst_attrs in sch_info['instances'].items():
+                    inst_lib_name = inst_attrs['lib_name']
+                    if inst_lib_name not in self.exc_libs:
+                        inst_cell_name = inst_attrs['cell_name']
+                        if (inst_lib_name, inst_cell_name) not in cell_list:
+                            self._import_design(inst_lib_name, inst_cell_name, view_name, cell_list)
 
-    def parse_schematic_template(self, lib_name: str, cell_name: str) -> str:
+    def parse_schematic_template(self, lib_name: str, cell_name: str, view_name: str) -> str:
         """Parse the given schematic template.
 
         Parameters
@@ -421,13 +425,15 @@ class SkillInterface(DbAccess):
             name of the library.
         cell_name : str
             name of the cell.
+        view_name : str
+            name of the view.
 
         Returns
         -------
         template : str
             the content of the netlist structure file.
         """
-        cmd = 'parse_cad_sch( "%s" "%s" {netlist_info} )' % (lib_name, cell_name)
+        cmd = 'parse_cad_sch( "%s" "%s" "%s" {netlist_info} )' % (lib_name, cell_name, view_name)
         return self._eval_skill(cmd, out_file='netlist_info')
 
     def write_tech_info(self, tech_name: str, out_yaml: str) -> None:
