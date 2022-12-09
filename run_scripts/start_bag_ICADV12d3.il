@@ -163,7 +163,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             indent = "  "
             foreach( pair cv~>bBox
                 foreach( elem pair
-                    fprintf( p "%s- %d\n" indent round(elem*160) )
+                    fprintf( p "%s- %d\n" indent round(elem*160) )      ; TODO: Why 160?
                 )
             )
 
@@ -179,8 +179,25 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     indent = "    "
                     fprintf( p "%sobj:\n" indent )
                     indent = "      "
-                    fprintf( p "%s- net: \"\"\n" indent )
+                    fprintf( p "%s- 0\n" indent )   ; TODO: enum for symbol terminals?
+                    fprintf( p "%s- layer: 229\n" indent )  ; TODO: drawing layer?
+                    fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: drawing purpose?
+                    fprintf( p "%s  net: \"\"\n" indent )
+                    ; TODO: get bBox
+
                     indent = "    "
+                    ; get stype
+                    if(term~>net~>sigType == "signal" then
+                        sig_type = 0
+                    else if(term~>net~>sigType == "supply" then
+                        sig_type = 1
+                    else
+                        ; term~>net~>sigType == "ground"
+                        sig_type = 2
+                        )
+                    )
+                    fprintf( p "%sstype: %d\n" indent sig_type )
+
                     ; get ttype
                     if(term~>direction == "inputOutput" then
                         term_type = 2
@@ -204,6 +221,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         indent = "    "
                         fprintf( p "%sobj:\n" indent )
                         indent = "      "
+                        fprintf( p "%s- 1\n" indent )   ; TODO: enum for schematic terminals?
                         fprintf( p "%s- inst:\n" indent )
                         indent = "          "
                         fprintf( p "%slib_name: %s\n" indent inst~>libName )
@@ -271,7 +289,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 )
             )
 
-            ; print shapes
+            ; TODO: print shapes
 
             ; print instances
             indent = ""
@@ -339,7 +357,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     prop_cnt = 0
                     foreach(param inst~>prop
                         fprintf( p "%s  %s:\n" indent param~>name )
-                        fprintf( p "%s    - 3\n" indent ) ; enum for string
+                        fprintf( p "%s    - 3\n" indent ) ; TODO: enum for string?
                         if(param~>value == "" then
                             fprintf( p "%s    - \"\"\n" indent )
                         else
@@ -357,6 +375,44 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             when(inst_cnt == 0
                 fprintf( p "  {}\n" )
             )
+
+            ; print properties
+            indent = ""
+            fprintf( p "%sprops:\n" indent )
+            foreach( _prop cv~>prop
+                indent = "  "
+                fprintf( p "%s%s:\n" indent _prop~>name )
+                indent = "    "
+                if( _prop~>valueType == "string" then
+                    fprintf( p "%s- 3\n" indent )   ; TODO: enum for string?
+                    if( _prop~>value == "" then
+                        fprintf( p "%s- \"\"\n" indent )
+                    else
+                        fprintf( p "%s- %s\n" indent _prop~>value )
+                    )
+                else if( _prop~>valueType == "int" then
+                    fprintf( p "%s- 0\n" indent )   ; TODO: enum for int?
+                    fprintf( p "%s- %d\n" indent _prop~>value )
+                else if( _prop~>valueType == "time" then
+                    fprintf( p "%s- 4\n" indent )   ; TODO: enum for time?
+                    fprintf( p "%s- time_val: %s\n" indent _prop~>value )   ; TODO: how to format time?
+                else if( _prop~>valueType == "ILList" then
+                    fprintf( p "%s- 5\n" indent )   ; TODO: enum for ILList?
+                    fprintf( p "%s- name: ILList\n" indent )
+                    fprintf( p "%s  bin_val: ( " indent )
+                    foreach( _elem _prop~>value
+                        fprintf( p "\"%s\" " _elem )
+
+                    )
+                    fprintf( p ")" )
+                )
+                )
+                )
+                )
+
+            )
+
+            ; TODO: print app_defs
 
             ; close resources
             close(p)
