@@ -163,7 +163,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             indent = "  "
             foreach( pair cv~>bBox
                 foreach( elem pair
-                    fprintf( p "%s- %d\n" indent round(elem*160) )      ; TODO: Why 160?
+                    fprintf( p "%s- %d\n" indent round(elem * cv~>DBUPerUU) )
                 )
             )
 
@@ -235,7 +235,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                                 fprintf( p "%s  - %s\n" indent xf)
                             else if(xform_idx == 0 then
                                 foreach( xy xf
-                                    fprintf( p "%s  - %d\n" indent round(xy*160))
+                                    fprintf( p "%s  - %d\n" indent round(xy * cv~>DBUPerUU))
                                 )
                             )
                             )
@@ -246,7 +246,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%sbbox:\n" indent )
                         foreach( pair inst~>bBox
                             foreach( elem pair
-                                fprintf( p "%s  - %d\n" indent round(elem*160) )
+                                fprintf( p "%s  - %d\n" indent round(elem * cv~>DBUPerUU) )
                             )
                         )
 
@@ -290,6 +290,19 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             )
 
             ; TODO: print shapes
+            indent = ""
+            fprintf( p "%sshapes:\n" indent )
+            foreach( shape cv~>shapes
+                indent = "  "
+                fprintf( p "%s-\n" indent )
+                indent = "    "
+                fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
+                if(shape~>net then
+                    fprintf( p "%s  net: %s\n" indent shape~>net~>name )
+                else
+                    fprintf( p "%s  net: \"\"\n" indent )
+                )
+            )
 
             ; print instances
             indent = ""
@@ -322,7 +335,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                             fprintf( p "%s  - %s\n" indent xf)
                         else if(xform_idx == 0 then
                             foreach( xy xf
-                                fprintf( p "%s  - %d\n" indent round(xy*160))
+                                fprintf( p "%s  - %d\n" indent round(xy * cv~>DBUPerUU))
                             )
                         )
                         )
@@ -333,7 +346,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     fprintf( p "%sbbox:\n" indent )
                     foreach( pair inst~>bBox
                         foreach( elem pair
-                            fprintf( p "%s  - %d\n" indent round(elem*160) )
+                            fprintf( p "%s  - %d\n" indent round(elem * cv~>DBUPerUU) )
                         )
                     )
 
