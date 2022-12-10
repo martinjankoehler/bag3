@@ -358,24 +358,72 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 if( (view_name == "schematic" && shape~>layerNum != 229) || (view_name == "symbol" && !(shape~>layerNum == 229 && shape~>purpose == "drawing")) then
                     indent = "  "
                     fprintf( p "%s-\n" indent )
+
                     indent = "    "
-                    fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
-                    if( shape~>purpose == "drawing" then
-                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
-                    else if( shape~>purpose == "label" then
+                    if( shape~>purpose == "label" then
+                        if( shape~>layerName == "wire" || shape~>layerName == "pin" then
+                            fprintf( p "%s- 7\n" indent )   ; enum for wire label and pin label
+                        else if( shape~>layerName == "device" || shape~>layerName == "instance" then
+                            fprintf( p "%s- 8\n" indent )   ; enum for wire label and pin label
+                        else
+                            error( "Unrecognized layerName = %s" shape~>layerName )
+                        ))
+                        fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
                         fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
-                    else if( shape~>purpose == "drawing1" then
-                        fprintf( p "%s  purpose: 241\n" indent )    ; get purpose number from cv?
+                        if( shape~>net~>name then
+                            fprintf( p "%s  net: %s\n" indent shape~>net~>name )
+                        else
+                            fprintf( p "%s  net: \"\"\n" indent )
+                        )
+                        fprintf( p "%s  origin:\n" indent )
+                        foreach( _xy shape~>xy
+                            fprintf( p "%s    - %d\n" indent round(_xy * cv~>DBUPerUU) )
+                        )
+                        ; TODO: get alignment
+                        fprintf( p "%s  orient: %s\n" indent shape~>orient )
+                        if( shape~>font == "stick" then
+                            fprintf( p "%s  font: 5\n" indent )
+                        else
+                            error( "Unrecognized font = %s" shape~>font )
+                        )
+                        fprintf( p "%s  height: %d\n" indent round(shape~>height * cv~>DBUPerUU) )
+                        if( shape~>isOverbar then
+                            fprintf( p "%s  overbar: true\n" indent )
+                        else
+                            fprintf( p "%s  overbar: false\n" indent )
+                        )
+                        if( shape~>isVisible then
+                            fprintf( p "%s  visible: true\n" indent )
+                        else
+                            fprintf( p "%s  visible: false\n" indent )
+                        )
+                        if( shape~>isDrafted then
+                            fprintf( p "%s  drafting: true\n" indent )
+                        else
+                            fprintf( p "%s  drafting: false\n" indent )
+                        )
+                        if( shape~>layerName == "device" || shape~>layerName == "instance" then
+                            fprintf( p "%s  text: \"%s\"\n" indent shape~>theLabel )
+                            fprintf( p "%s  evaluator: cdsNLPEvalText\n" indent )   ; get from cv?
+                        else
+                            if(shape~>theLabel then
+                                fprintf( p "%s  text: %s\n" indent shape~>theLabel )
+                            else
+                                fprintf( p "%s  text: %s\n" indent shape~>net~>name )
+                            )
+                        )
                     else
-                        error( "Unexpected purpose = %s" shape~>purpose )
-                    )))
-                    if(shape~>net then
-                        fprintf( p "%s  net: %s\n" indent shape~>net~>name )
-                    else
-                        fprintf( p "%s  net: \"\"\n" indent )
+                        ; TODO: figure out 0, 2, 4, 5 enums
+                        fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
+                        if( shape~>purpose == "drawing" then
+                            fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
+                        else if( shape~>purpose == "drawing1" then
+                            fprintf( p "%s  purpose: 241\n" indent )    ; get purpose number from cv?
+                        else
+                            error( "Unexpected purpose = %s" shape~>purpose )
+                        ))
                     )
                 )
-                ; TODO: get other relevant parameters
             )
 
             ; print instances
