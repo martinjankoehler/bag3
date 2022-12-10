@@ -171,44 +171,58 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             indent = ""
             fprintf( p "%sterminals:\n" indent )
             if(view_name == "symbol" then
-                foreach( term cv~>terminals
-                    ; print entry for terminal
-                    indent = "  "
-                    fprintf( p "%s%s:\n" indent term~>name )
-                    ; print terminal information
-                    indent = "    "
-                    fprintf( p "%sobj:\n" indent )
-                    indent = "      "
-                    fprintf( p "%s- 0\n" indent )   ; TODO: enum for symbol terminals?
-                    fprintf( p "%s- layer: 229\n" indent )  ; TODO: drawing layer?
-                    fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: drawing purpose?
-                    fprintf( p "%s  net: \"\"\n" indent )
-                    ; TODO: get bBox
-
-                    indent = "    "
-                    ; get stype
-                    if(term~>net~>sigType == "signal" then
-                        sig_type = 0
-                    else if(term~>net~>sigType == "supply" then
-                        sig_type = 1
-                    else
-                        ; term~>net~>sigType == "ground"
-                        sig_type = 2
+                ; use cv~>shapes instead of cv~>terminals since the first has more information
+                foreach( shape cv~>shapes
+                    if(shape~>net then
+                        ; print entry for terminal
+                        indent = "  "
+                        fprintf( p "%s%s:\n" indent shape~>net~>name )
+                        ; print terminal information
+                        indent = "    "
+                        fprintf( p "%sobj:\n" indent )
+                        indent = "      "
+                        fprintf( p "%s- 0\n" indent )   ; TODO: enum for symbol terminals?
+                        fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
+                        if( shape~>purpose == "drawing" then
+                            fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: get drawing purpose from cv?
+                        else
+                            error( "Unexpected purpose = %s" shape~>purpose )
                         )
-                    )
-                    fprintf( p "%sstype: %d\n" indent sig_type )
+                        fprintf( p "%s  net: \"\"\n" indent )
 
-                    ; get ttype
-                    if(term~>direction == "inputOutput" then
-                        term_type = 2
-                    else if(term~>direction == "input" then
-                        term_type = 0
-                    else
-                        ; term~>direction == "output"
-                        term_type = 1
+                        ; print bbox
+                        fprintf( p "%s  bbox:\n" indent )
+                        foreach( pair shape~>bBox
+                            foreach( elem pair
+                                fprintf( p "%s    - %d\n" indent round(elem * cv~>DBUPerUU) )
+                            )
                         )
+
+                        indent = "    "
+                        ; get stype
+                        if(shape~>net~>sigType == "signal" then
+                            sig_type = 0
+                        else if(shape~>net~>sigType == "supply" then
+                            sig_type = 1
+                        else
+                            ; shape~>net~>sigType == "ground"
+                            sig_type = 2
+                            )
+                        )
+                        fprintf( p "%sstype: %d\n" indent sig_type )
+
+                        ; get ttype
+                        if(shape~>pin~>term~>direction == "inputOutput" then
+                            term_type = 2
+                        else if(shape~>pin~>term~>direction == "input" then
+                            term_type = 0
+                        else
+                            ; shape~>pin~>term~>direction == "output"
+                            term_type = 1
+                            )
+                        )
+                        fprintf( p "%sttype: %d\n" indent term_type )
                     )
-                    fprintf( p "%sttype: %d\n" indent term_type )
                 )
             else
                 ; use cv~>instances instead of cv~>terminals since the first has more information
@@ -261,6 +275,8 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         )
                         fprintf( p "%sis_primitive: %s\n" indent is_primitive )
 
+                        ; TODO: get attributes from cv~>shapes?
+
                         indent = "    "
                         ; get stype
                         if(inst~>net~>sigType == "signal" then
@@ -289,19 +305,32 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 )
             )
 
-            ; TODO: print shapes
             indent = ""
             fprintf( p "%sshapes:\n" indent )
             foreach( shape cv~>shapes
-                indent = "  "
-                fprintf( p "%s-\n" indent )
-                indent = "    "
-                fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
-                if(shape~>net then
-                    fprintf( p "%s  net: %s\n" indent shape~>net~>name )
-                else
-                    fprintf( p "%s  net: \"\"\n" indent )
+                if( (view_name == "schematic" && shape~>net) || (view_name == "symbol" && !shape~>net) then
+                    indent = "  "
+                    fprintf( p "%s-\n" indent )
+                    indent = "    "
+                    fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
+                    if( shape~>purpose == "drawing" then
+                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: get purpose number from cv?
+                    else if( shape~>purpose == "label" then
+                        fprintf( p "%s  purpose: 237\n" indent )    ; TODO: get purpose number from cv?
+                    else if( shape~>purpose == "drawing1" then
+                        fprintf( p "%s  purpose: 241\n" indent )    ; TODO: get purpose number from cv?
+                    else
+                        error( "Unexpected purpose = %s" shape~>purpose )
+                    )
+                    )
+                    )
+                    if(shape~>net then
+                        fprintf( p "%s  net: %s\n" indent shape~>net~>name )
+                    else
+                        fprintf( p "%s  net: \"\"\n" indent )
+                    )
                 )
+                ; TODO: get other relevant parameters
             )
 
             ; print instances
