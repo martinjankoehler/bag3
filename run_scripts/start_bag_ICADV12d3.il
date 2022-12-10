@@ -133,7 +133,7 @@ procedure( parse_data_from_file_helper( p )
 ; Parse the netlist of the given cellview.
 ; Works on schematic and veriloga and symbol.
 procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
-    let( (skip cv p indent direction term_names tb_list tb_match
+    let( (skip cv p indent direction term_names tb_list tb_match shp_status shp_ptr inst
           inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive xform_idx prop_cnt)
         skip = 0
         if(view_name == "schematic" then
@@ -182,9 +182,9 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         indent = "    "
                         fprintf( p "%sobj:\n" indent )
                         indent = "      "
-                        fprintf( p "%s- 0\n" indent )   ; TODO: enum for symbol terminals?
+                        fprintf( p "%s- 0\n" indent )   ; enum for symbol terminals
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
-                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: get drawing purpose from cv?
+                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
                         fprintf( p "%s  net: \"\"\n" indent )
 
                         ; print bbox
@@ -222,18 +222,32 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     )
                 )
             else
-                ; use cv~>instances instead of cv~>terminals since the first has more information
-                foreach( inst cv~>instances
-                    if(inst~>purpose == "pin" then
+                ; use cv~>shapes instead of cv~>terminals since the first has more information
+                foreach( shape cv~>shapes
+                    if(shape~>layerNum == 229 then
                         ; print entry for terminal
                         indent = "  "
-                        fprintf( p "%s%s:\n" indent inst~>net~>name )
+                        fprintf( p "%s%s:\n" indent shape~>associate~>name )
                         ; print terminal information
                         indent = "    "
                         fprintf( p "%sobj:\n" indent )
                         indent = "      "
-                        fprintf( p "%s- 1\n" indent )   ; TODO: enum for schematic terminals?
+                        fprintf( p "%s- 1\n" indent )   ; enum for schematic terminals
                         fprintf( p "%s- inst:\n" indent )
+
+                        ; find corresponding instance in cv~>instances, and exit once match is found
+                        shp_status = t
+                        shp_ptr = cv~>instances
+                        while(shp_status && shp_ptr
+                            inst = car(shp_ptr)
+                            if(inst~>net~>name == shape~>associate~>name then
+                                ; found match, exit
+                                shp_status = nil
+                            else
+                                shp_ptr = cdr(shp_ptr)
+                            )
+                        )
+
                         indent = "          "
                         fprintf( p "%slib_name: %s\n" indent inst~>libName )
                         fprintf( p "%scell_name: %s\n" indent inst~>cellName )
@@ -248,8 +262,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                                 foreach( xy xf
                                     fprintf( p "%s  - %d\n" indent round(xy * cv~>DBUPerUU))
                                 )
-                            )
-                            )
+                            ))
                             xform_idx++
                         )
 
@@ -272,7 +285,42 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         )
                         fprintf( p "%sis_primitive: %s\n" indent is_primitive )
 
-                        ; TODO: get attributes from cv~>shapes?
+                        ; print attr
+                        indent = "      "
+                        fprintf( p "%s  attr:\n" indent )
+                        indent = "          "
+                        fprintf( p "%slayer: %d\n" indent shape~>layerNum )
+                        fprintf( p "%spurpose: 237\n" indent )  ; get purpose number from cv?
+                        fprintf( p "%snet: \"\"\n" indent )
+                        fprintf( p "%sorigin:\n" indent )
+                        foreach( _xy shape~>xy
+                            fprintf( p "%s  - %d\n" indent round(_xy * cv~>DBUPerUU) )
+                        )
+                        ; TODO: get alignment
+                        fprintf( p "%sorient: %s\n" indent shape~>orient )
+                        if( shape~>font == "stick" then
+                            fprintf( p "%sfont: 5\n" indent )
+                        else
+                            error( "Unrecognized font = %s" shape~>font )
+                        )
+                        fprintf( p "%sheight: %d\n" indent round(shape~>height * cv~>DBUPerUU) )
+                        if( shape~>isOverbar then
+                            fprintf( p "%soverbar: true\n" indent )
+                        else
+                            fprintf( p "%soverbar: false\n" indent )
+                        )
+                        if( shape~>isVisible then
+                            fprintf( p "%svisible: true\n" indent )
+                        else
+                            fprintf( p "%svisible: false\n" indent )
+                        )
+                        if( shape~>isDrafted then
+                            fprintf( p "%sdrafting: true\n" indent )
+                        else
+                            fprintf( p "%sdrafting: false\n" indent )
+                        )
+                        ; TODO: get attr_type
+                        ; TODO: get format
 
                         indent = "    "
                         ; get stype
@@ -313,16 +361,14 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     indent = "    "
                     fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
                     if( shape~>purpose == "drawing" then
-                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: get purpose number from cv?
+                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
                     else if( shape~>purpose == "label" then
-                        fprintf( p "%s  purpose: 237\n" indent )    ; TODO: get purpose number from cv?
+                        fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
                     else if( shape~>purpose == "drawing1" then
-                        fprintf( p "%s  purpose: 241\n" indent )    ; TODO: get purpose number from cv?
+                        fprintf( p "%s  purpose: 241\n" indent )    ; get purpose number from cv?
                     else
                         error( "Unexpected purpose = %s" shape~>purpose )
-                    )
-                    )
-                    )
+                    )))
                     if(shape~>net then
                         fprintf( p "%s  net: %s\n" indent shape~>net~>name )
                     else
@@ -365,8 +411,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                             foreach( xy xf
                                 fprintf( p "%s  - %d\n" indent round(xy * cv~>DBUPerUU))
                             )
-                        )
-                        )
+                        ))
                         xform_idx++
                     )
 
@@ -398,7 +443,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     prop_cnt = 0
                     foreach(param inst~>prop
                         fprintf( p "%s  %s:\n" indent param~>name )
-                        fprintf( p "%s    - 3\n" indent ) ; TODO: enum for string?
+                        fprintf( p "%s    - 3\n" indent ) ; enum for string
                         if(param~>value == "" then
                             fprintf( p "%s    - \"\"\n" indent )
                         else
@@ -425,20 +470,20 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 fprintf( p "%s%s:\n" indent _prop~>name )
                 indent = "    "
                 if( _prop~>valueType == "string" then
-                    fprintf( p "%s- 3\n" indent )   ; TODO: enum for string?
+                    fprintf( p "%s- 3\n" indent )   ; enum for string
                     if( _prop~>value == "" then
                         fprintf( p "%s- \"\"\n" indent )
                     else
                         fprintf( p "%s- %s\n" indent _prop~>value )
                     )
                 else if( _prop~>valueType == "int" then
-                    fprintf( p "%s- 0\n" indent )   ; TODO: enum for int?
+                    fprintf( p "%s- 0\n" indent )   ; enum for int
                     fprintf( p "%s- %d\n" indent _prop~>value )
                 else if( _prop~>valueType == "time" then
-                    fprintf( p "%s- 4\n" indent )   ; TODO: enum for time?
+                    fprintf( p "%s- 4\n" indent )   ; enum for time
                     fprintf( p "%s- time_val: %d\n" indent stringToTime(_prop~>value) )
                 else if( _prop~>valueType == "ILList" then
-                    fprintf( p "%s- 5\n" indent )   ; TODO: enum for ILList?
+                    fprintf( p "%s- 5\n" indent )   ; enum for ILList
                     fprintf( p "%s- name: ILList\n" indent )
                     fprintf( p "%s  bin_val: ( " indent )
                     foreach( _elem _prop~>value
@@ -446,11 +491,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
 
                     )
                     fprintf( p ")" )
-                )
-                )
-                )
-                )
-
+                ))))
             )
 
             ; TODO: print app_defs
