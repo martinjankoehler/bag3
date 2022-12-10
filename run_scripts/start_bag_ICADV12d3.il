@@ -173,7 +173,8 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             if(view_name == "symbol" then
                 ; use cv~>shapes instead of cv~>terminals since the first has more information
                 foreach( shape cv~>shapes
-                    if(shape~>net then
+                    ; pick the shape only if it is (pin, drawing)
+                    if(shape~>layerNum == 229 && shape~>purpose == "drawing" then
                         ; print entry for terminal
                         indent = "  "
                         fprintf( p "%s%s:\n" indent shape~>net~>name )
@@ -183,11 +184,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         indent = "      "
                         fprintf( p "%s- 0\n" indent )   ; TODO: enum for symbol terminals?
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
-                        if( shape~>purpose == "drawing" then
-                            fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: get drawing purpose from cv?
-                        else
-                            error( "Unexpected purpose = %s" shape~>purpose )
-                        )
+                        fprintf( p "%s  purpose: 4294967295\n" indent )     ; TODO: get drawing purpose from cv?
                         fprintf( p "%s  net: \"\"\n" indent )
 
                         ; print bbox
@@ -308,7 +305,9 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             indent = ""
             fprintf( p "%sshapes:\n" indent )
             foreach( shape cv~>shapes
-                if( (view_name == "schematic" && shape~>net) || (view_name == "symbol" && !shape~>net) then
+                ; if schematic, pick only if it's not pin
+                ; if symbol, pick only if it's not (pin, drawing)
+                if( (view_name == "schematic" && shape~>layerNum != 229) || (view_name == "symbol" && !(shape~>layerNum == 229 && shape~>purpose == "drawing")) then
                     indent = "  "
                     fprintf( p "%s-\n" indent )
                     indent = "    "
@@ -437,7 +436,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     fprintf( p "%s- %d\n" indent _prop~>value )
                 else if( _prop~>valueType == "time" then
                     fprintf( p "%s- 4\n" indent )   ; TODO: enum for time?
-                    fprintf( p "%s- time_val: %s\n" indent _prop~>value )   ; TODO: how to format time?
+                    fprintf( p "%s- time_val: %d\n" indent stringToTime(_prop~>value) )
                 else if( _prop~>valueType == "ILList" then
                     fprintf( p "%s- 5\n" indent )   ; TODO: enum for ILList?
                     fprintf( p "%s- name: ILList\n" indent )
