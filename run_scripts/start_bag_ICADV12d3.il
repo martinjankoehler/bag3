@@ -597,7 +597,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "\"%s\" " _elem )
 
                     )
-                    fprintf( p ")" )
+                    fprintf( p ")\n" )
                 ))))
             )
 
