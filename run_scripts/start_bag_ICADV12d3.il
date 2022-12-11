@@ -130,6 +130,7 @@ procedure( parse_data_from_file_helper( p )
 )
 
 
+defMathConstants('MyConsts)
 ; Parse the netlist of the given cellview.
 ; Works on schematic and veriloga and symbol.
 procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
@@ -413,7 +414,19 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                             )
                         )
                     else
-                        ; TODO: figure out 0, 2, 4, 5 enums
+                        if( shape~>objType == "line" then
+                            fprintf( p "%s- 5\n" indent )   ; enum for wire drawing and some device drawing
+                        else if( shape~>objType == "path" then
+                            fprintf( p "%s- 6\n" indent )   ; enum for some device drawing1
+                        else if( shape~>objType == "arc" then
+                            fprintf( p "%s- 2\n" indent )   ; enum for some device drawing
+                        else if( shape~>objType == "rect" then
+                            fprintf( p "%s- 0\n" indent )   ; enum for instance drawing and some device drawing
+                        else if( shape~>objType == "ellipse" then
+                            fprintf( p "%s- 4\n" indent )   ; enum for some device drawing1 and some device drawing
+                        else
+                            error( "Unrecognized objType = %s" shape~>objType )
+                        )))))
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
                         if( shape~>purpose == "drawing" then
                             fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
@@ -422,6 +435,52 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         else
                             error( "Unexpected purpose = %s" shape~>purpose )
                         ))
+                        if( shape~>net then
+                            fprintf( p "%s  net: %s\n" indent shape~>net~>name )
+                        else
+                            fprintf( p "%s  net: \"\"\n" indent )
+                        )
+
+                        if( shape~>objType == "line" || shape~>objType == "path" then
+                            if( shape~>objType == "path" then
+                                fprintf( p "%s  width: %d\n" indent round(shape~>width * cv~>DBUPerUU) )
+                            )
+                            fprintf( p "%s  points:\n" indent )
+                            foreach( pair shape~>points
+                                fprintf( p "%s    -\n" indent )
+                                foreach( elem pair
+                                    fprintf( p "%s      - %d\n" indent round(elem * cv~>DBUPerUU) )
+                                )
+                            )
+                            if( shape~>objType == "path" then
+                                if( shape~>pathStyle == "roundRound" then
+                                    fprintf( p "%s  style: 2\n" indent )    ; enum for round path style
+                                else
+                                    error( "Unrecognized path style = %s" shape~>pathStyle )
+                                )
+                                fprintf( p "%s  begin_ext: %d\n" indent round(shape~>beginExt * cv~>DBUPerUU) )
+                                fprintf( p "%s  end_ext: %d\n" indent round(shape~>endExt * cv~>DBUPerUU) )
+                            )
+                        else
+                            if( shape~>objType == "arc" then
+                                if( shape~>startAngle < 0 then
+                                    fprintf( p "%s  ang_start: %.16f\n" indent 2 * MyConsts.PI + shape~>startAngle )
+                                else
+                                    fprintf( p "%s  ang_start: %.16f\n" indent shape~>startAngle )
+                                )
+                                if( shape~>stopAngle < 0 then
+                                    fprintf( p "%s  ang_stop: %.16f\n" indent 2 * MyConsts.PI + shape~>stopAngle )
+                                else
+                                    fprintf( p "%s  ang_stop: %.16f\n" indent shape~>stopAngle )
+                                )
+                            )
+                            fprintf( p "%s  bbox:\n" indent )
+                            foreach( pair shape~>bBox
+                                foreach( elem pair
+                                    fprintf( p "%s    - %d\n" indent round(elem * cv~>DBUPerUU) )
+                                )
+                            )
+                        )
                     )
                 )
             )
