@@ -134,8 +134,8 @@ defMathConstants('MyConsts)
 ; Parse the netlist of the given cellview.
 ; Works on schematic and veriloga and symbol.
 procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
-    let( (skip cv p indent direction term_names tb_list tb_match shp_status shp_ptr inst
-          inst_lib_name inst_cell_name inst_cnt term_cell_name term_type sig_type is_primitive xform_idx prop_cnt)
+    let( (skip cv p indent direction shp_status shp_ptr inst term_cnt
+          inst_cnt term_type sig_type is_primitive xform_idx prop_cnt align_type obj_type port_cnt)
         skip = 0
         if(view_name == "schematic" then
             unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
@@ -170,12 +170,15 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
 
             ; print terminals
             indent = ""
+            term_cnt = 0
             fprintf( p "%sterminals:\n" indent )
             if(view_name == "symbol" then
                 ; use cv~>shapes instead of cv~>terminals since the first has more information
                 foreach( shape cv~>shapes
                     ; pick the shape only if it is (pin, drawing)
                     if(shape~>layerNum == 229 && shape~>purpose == "drawing" then
+                        term_cnt++
+
                         ; print entry for terminal
                         indent = "  "
                         fprintf( p "%s%s:\n" indent shape~>net~>name )
@@ -226,6 +229,8 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 ; use cv~>shapes instead of cv~>terminals since the first has more information
                 foreach( shape cv~>shapes
                     if(shape~>layerNum == 229 then
+                        term_cnt++
+
                         ; print entry for terminal
                         indent = "  "
                         fprintf( p "%s%s:\n" indent shape~>associate~>name )
@@ -275,8 +280,10 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                             )
                         )
 
-                        fprintf( p "%sconnections: {}\n" indent )
-                        fprintf( p "%sparams: {}\n" indent )
+                        fprintf( p "%sconnections:\n" indent )
+                        fprintf( p "%s  {}\n" indent )
+                        fprintf( p "%sparams:\n" indent )
+                        fprintf( p "%s  {}\n" indent )
 
                         ; get is_primitive
                         if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
@@ -297,7 +304,23 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         foreach( _xy shape~>xy
                             fprintf( p "%s  - %d\n" indent round(_xy * cv~>DBUPerUU) )
                         )
-                        ; TODO: get alignment
+
+                        ; print alignment
+                        if( shape~>justify == "centerRight" then
+                            align_type = 7
+                        else if( shape~>justify == "centerLeft" then
+                            align_type = 1
+                        else if( shape~>justify == "centerCenter" then
+                            align_type = 4
+                        else if( shape~>justify == "lowerLeft" then
+                            align_type = 2
+                        else if( shape~>justify == "lowerRight" then
+                            align_type = 8
+                        else
+                            error( "Unrecognized justify = %s" shape~>justify )
+                        )))))
+                        fprintf( p "%salignment: %d\n" indent align_type )
+
                         fprintf( p "%sorient: %s\n" indent shape~>orient )
                         if( shape~>font == "stick" then
                             fprintf( p "%sfont: 5\n" indent )
@@ -320,8 +343,12 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         else
                             fprintf( p "%sdrafting: false\n" indent )
                         )
-                        ; TODO: get attr_type
-                        ; TODO: get format
+                        if( shape~>assocType == "attrAssocType" then
+                            fprintf( p "%sattr_type: 0\n" indent )
+                        else
+                            error( "Unrecognized assocType = %s" shape~>assocType )
+                        )
+                        fprintf( p "%sformat: 1\n" indent )     ; get from cv?
 
                         indent = "    "
                         ; get stype
@@ -350,6 +377,9 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     )
                 )
             )
+            when(term_cnt == 0
+                fprintf( p "  {}\n" )
+            )
 
             indent = ""
             fprintf( p "%sshapes:\n" indent )
@@ -363,12 +393,13 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     indent = "    "
                     if( shape~>purpose == "label" then
                         if( shape~>layerName == "wire" || shape~>layerName == "pin" then
-                            fprintf( p "%s- 7\n" indent )   ; enum for wire label and pin label
+                            obj_type = 7   ; enum for wire label and pin label
                         else if( shape~>layerName == "device" || shape~>layerName == "instance" then
-                            fprintf( p "%s- 8\n" indent )   ; enum for wire label and pin label
+                            obj_type = 8   ; enum for device label and instance label
                         else
                             error( "Unrecognized layerName = %s" shape~>layerName )
                         ))
+                        fprintf( p "%s- %d\n" indent obj_type )
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
                         fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
                         if( shape~>net~>name then
@@ -380,7 +411,23 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         foreach( _xy shape~>xy
                             fprintf( p "%s    - %d\n" indent round(_xy * cv~>DBUPerUU) )
                         )
-                        ; TODO: get alignment
+
+                        ; print alignment
+                        if( shape~>justify == "centerRight" then
+                            align_type = 7
+                        else if( shape~>justify == "centerLeft" then
+                            align_type = 1
+                        else if( shape~>justify == "centerCenter" then
+                            align_type = 4
+                        else if( shape~>justify == "lowerLeft" then
+                            align_type = 2
+                        else if( shape~>justify == "lowerRight" then
+                            align_type = 8
+                        else
+                            error( "Unrecognized justify = %s" shape~>justify )
+                        )))))
+                        fprintf( p "%s  alignment: %d\n" indent align_type )
+
                         fprintf( p "%s  orient: %s\n" indent shape~>orient )
                         if( shape~>font == "stick" then
                             fprintf( p "%s  font: 5\n" indent )
@@ -415,18 +462,19 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         )
                     else
                         if( shape~>objType == "line" then
-                            fprintf( p "%s- 5\n" indent )   ; enum for wire drawing and some device drawing
+                            obj_type = 5   ; enum for wire drawing and some device drawing
                         else if( shape~>objType == "path" then
-                            fprintf( p "%s- 6\n" indent )   ; enum for some device drawing1
+                            obj_type = 6   ; enum for some device drawing1
                         else if( shape~>objType == "arc" then
-                            fprintf( p "%s- 2\n" indent )   ; enum for some device drawing
+                            obj_type = 2   ; enum for some device drawing
                         else if( shape~>objType == "rect" then
-                            fprintf( p "%s- 0\n" indent )   ; enum for instance drawing and some device drawing
+                            obj_type = 0   ; enum for instance drawing and some device drawing
                         else if( shape~>objType == "ellipse" then
-                            fprintf( p "%s- 4\n" indent )   ; enum for some device drawing1 and some device drawing
+                            obj_type = 4   ; enum for some device drawing1 and some device drawing
                         else
                             error( "Unrecognized objType = %s" shape~>objType )
                         )))))
+                        fprintf( p "%s- %d\n" indent obj_type )
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
                         if( shape~>purpose == "drawing" then
                             fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
@@ -493,13 +541,6 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 if(inst~>purpose != "pin" then
                     inst_cnt++
 
-                    ; get is_primitive
-                    if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
-                        is_primitive = "true"
-                    else
-                        is_primitive = "false"
-                    )
-
                     ; print entry for instance
                     indent = "  "
                     fprintf( p "%s%s:\n" indent inst~>name )
@@ -562,6 +603,12 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%s  {}\n" indent )
                     )
 
+                    ; get is_primitive
+                    if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
+                        is_primitive = "true"
+                    else
+                        is_primitive = "false"
+                    )
                     fprintf( p "%sis_primitive: %s\n" indent is_primitive )
                 )
             )
@@ -592,16 +639,32 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                 else if( _prop~>valueType == "ILList" then
                     fprintf( p "%s- 5\n" indent )   ; enum for ILList
                     fprintf( p "%s- name: ILList\n" indent )
-                    fprintf( p "%s  bin_val: ( " indent )
+                    fprintf( p "%s  bin_val: (" indent )
+                    prop_cnt = 0
                     foreach( _elem _prop~>value
-                        fprintf( p "\"%s\" " _elem )
-
+                        if( prop_cnt > 0
+                            fprintf( p " " )
+                        )
+                        fprintf( p "\"%s\"" _elem )
+                        prop_cnt++
                     )
                     fprintf( p ")\n" )
                 ))))
             )
 
-            ; TODO: print app_defs
+            ; print app_defs
+            indent = ""
+            fprintf( p "%sapp_defs:\n" indent )
+            fprintf( p "%s  _dbLastSavedCounter:\n" indent )
+            fprintf( p "%s    - 0\n" indent )
+            fprintf( p "%s    - %d\n" indent cv~>modifiedCounter )
+            fprintf( p "%s  _dbvCvTimeStamp:\n" indent )
+            fprintf( p "%s    - 0\n" indent )
+            fprintf( p "%s    - %d\n" indent cv~>modifiedCounter )
+            fprintf( p "%s  cdbRevision:\n" indent )
+            fprintf( p "%s    - 0\n" indent )
+            fprintf( p "%s    - 227612\n" indent )  ; get from cv?
+            ; TODO: get cdnSPDesignMajorVersion
 
             ; close resources
             close(p)
