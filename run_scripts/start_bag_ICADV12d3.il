@@ -717,6 +717,39 @@ procedure( refresh_cellviews( lib_name cell_view_list_f "tt" )
     )
 )
 
+
+; if library with lib_name does not exist, create a new library with that name.
+; Otherwise, if erase is true, remove all cells in that library.
+; Returns the library database object.
+procedure( create_or_erase_library(lib_name tech_lib lib_path erase "tttg")
+    let( (lib_obj)
+        if( lib_obj = ddGetObj(lib_name nil nil nil nil "r") then
+            when( erase
+                ; delete all cells in the library
+                foreach( cell lib_obj~>cells
+                    unless( ddDeleteObj(cell)
+                        error("cannot delete cell %s in library %s\n" cell~>name lib_name)
+                    )
+                )
+            )
+            ddReleaseObj(lib_obj)
+            't
+        else
+            ; create library if not exist
+            when( and(lib_path (lib_path != "."))
+                lib_path = strcat(lib_path "/" lib_name)
+            )
+            lib_obj = ddCreateLib(lib_name lib_path)
+            ; attach technology file
+            techBindTechFile(lib_obj tech_lib)
+            ; close library
+            ddReleaseObj(lib_obj)
+            't
+        )
+    )
+)
+
+
 ; modify label text in a layout
 procedure( modify_label(lib_name cell_name reg_before reg_after "tttt")
     let((cv lbl_txt new_lbl)
