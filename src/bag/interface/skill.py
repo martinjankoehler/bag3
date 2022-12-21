@@ -50,9 +50,10 @@ import shutil
 from pathlib import Path
 
 from ..io.common import fix_string
-from ..io.file import open_temp, read_yaml, write_file
+from ..io.file import open_temp, read_yaml, write_file, read_file, is_valid_file
 from ..io.string import read_yaml_str, to_yaml_str
 from ..layout.routing.grid import RoutingGrid
+from ..concurrent.core import batch_async_task
 from .database import DbAccess
 
 from .zmqwrapper import ZMQDealer
@@ -375,7 +376,34 @@ class SkillInterface(DbAccess):
 
     def import_gds_file(self, gds_fname: str, lib_name: str, layer_map: str, obj_map: str,
                         grid: RoutingGrid) -> None:
-        raise NotImplementedError
+        # create library in case it doesn't exist
+        self.create_library(lib_name)
+
+        cmd = ['strmin', '-library', lib_name, '-strmFile', gds_fname]
+
+        # add reference library list, if defined in bag_config.yaml
+        import_ref_lib = self.db_config.get('import_ref_lib')
+        if import_ref_lib:
+            cmd.extend(['-refLibList', import_ref_lib])
+
+        cmd.append('-enableColoring')
+
+        coro = self.async_import_gds_file(cmd)
+        results = batch_async_task([coro])
+        if results is None:
+            raise ValueError('Error during gds import')
+
+        ans = results[0]
+        if isinstance(ans, Exception):
+            raise ans
+
+    async def async_import_gds_file(self, cmd: List[str]) -> Tuple[bool, str]:
+        """A coroutine for importing gds"""
+        log_file = 'gds_import.log'
+        log_path = Path(log_file).resolve()
+        flow_info = [(cmd, str(log_path), None, str(log_path.parent), _gds_import_passed)]
+        # TODO: try to get SubProcessManager independently of Checker
+        return await self.checker._manager.async_new_subprocess_flow(flow_info)
 
     def _import_design(self, lib_name: str, cell_name: str, view_name: str, cell_list: List[Tuple[str, str]]) -> None:
         """Recursive helper for import_design_library and import_sch_cellview.
@@ -509,3 +537,30 @@ class SkillInterface(DbAccess):
                 file.write(f'  {_name}:\n')
                 for _tuple in _list:
                     file.write(f'    - [{_tuple[0]}, {_tuple[1]}]\n')
+
+
+# noinspection PyUnusedLocal
+def _gds_import_passed(retcode: int, log_file: str) -> Tuple[bool, str]:
+    """Check if GDS import passed
+
+    Parameters
+    ----------
+    retcode : int
+        return code of the GDS import process.
+    log_file : str
+        log file name.
+
+    Returns
+    -------
+    success : bool
+        True if GDS import passed.
+    log_file : str
+        the log file name.
+    """
+    fpath = Path(log_file)
+    if not is_valid_file(fpath, 'Translation completed', 60, 1):
+        return False, log_file if fpath.is_file() else ''
+
+    cmd_output = read_file(fpath)
+    test_str = '\'0\' error(s)'
+    return test_str in cmd_output, log_file
