@@ -129,13 +129,142 @@ procedure( parse_data_from_file_helper( p )
     )
 )
 
+; This function is used to print the bounding box in parse_cad_sch()
+procedure( print_bbox(p indent bbox dbu_per_uu)
+    fprintf( p "%sbbox:\n" indent )
+    foreach( pair bbox
+        foreach( elem pair
+            fprintf( p "%s  - %d\n" indent round(elem * dbu_per_uu) )
+        )
+    )
+)
+
+; This function is used to print the signal enum in parse_cad_sch()
+procedure( print_sig_type(p indent sig_type)
+    let( (sig_enum)
+        if(sig_type == "signal" then
+            sig_enum = 0
+        else if(sig_type == "supply" then
+            sig_enum = 1
+        else    ; sig_type == "ground"
+            sig_enum = 2
+        ))
+        fprintf( p "%sstype: %d\n" indent sig_enum )
+    )
+)
+
+; This function is used to print the term enum using direction in parse_cad_sch()
+procedure( print_term_type_from_direction(p indent direction)
+    let( (term_enum)
+        if(direction == "inputOutput" then
+            term_enum = 2
+        else if(direction == "input" then
+            term_enum = 0
+        else    ; direction == "output"
+            term_enum = 1
+        ))
+        fprintf( p "%sttype: %d\n" indent term_enum )
+    )
+)
+
+; This function is used to print the term enum using name in parse_cad_sch()
+procedure( print_term_type_from_name(p indent name)
+    let( (term_enum)
+        if(name == "iopin" then
+            term_enum = 2
+        else if(name == "ipin" then
+            term_enum = 0
+        else    ; name == "opin"
+            term_enum = 1
+        ))
+        fprintf( p "%sttype: %d\n" indent term_enum )
+    )
+)
+
+; This function is used to print the transformation in parse_cad_sch()
+procedure( print_xform(p indent xform dbu_per_uu)
+    let( (xform_idx)
+        fprintf( p "%sxform:\n" indent )
+        xform_idx = 0
+        foreach( xf xform
+            if(xform_idx == 1 then
+                fprintf( p "%s  - %s\n" indent xf)
+            else if(xform_idx == 0 then
+                foreach( xy xf
+                    fprintf( p "%s  - %d\n" indent round(xy * dbu_per_uu))
+                )
+            ))
+            xform_idx++
+        )
+    )
+)
+
+; This function is used to print "is_primitive" in parse_cad_sch()
+procedure( print_is_primitive(p indent lib_name)
+    let( (is_primitive)
+        if( lib_name == "basic" || lib_name == "analogLib" || lib_name == "ahdlLib" || lib_name == "BAG_prim" then
+            is_primitive = "true"
+        else
+            is_primitive = "false"
+        )
+        fprintf( p "%sis_primitive: %s\n" indent is_primitive )
+    )
+)
+
+; This function is used to print the origin in parse_cad_sch()
+procedure( print_origin(p indent origin dbu_per_uu)
+    fprintf( p "%sorigin:\n" indent )
+    foreach( xy origin
+        fprintf( p "%s  - %d\n" indent round(xy * dbu_per_uu) )
+    )
+)
+
+; This function is used to print the alignment enum in parse_cad_sch()
+procedure( print_alignment(p indent align_type)
+    let( (align_enum)
+        if( align_type == "centerRight" then
+            align_enum = 7
+        else if( align_type == "centerLeft" then
+            align_enum = 1
+        else if( align_type == "centerCenter" then
+            align_enum = 4
+        else if( align_type == "lowerLeft" then
+            align_enum = 2
+        else if( align_type == "lowerRight" then
+            align_enum = 8
+        else
+            error( "Unrecognized justify = %s" align_type )
+        )))))
+        fprintf( p "%salignment: %d\n" indent align_enum )
+    )
+)
+
+; This function is used to print the font enum in parse_cad_sch()
+procedure( print_font(p indent font_type)
+    let( (font_enum)
+        if( font_type == "stick" then
+            font_enum = 5
+        else
+            error( "Unrecognized font = %s" font_type )
+        )
+        fprintf( p "%sfont: %d\n" indent font_enum )
+    )
+)
+
+; This function is used to print boolean values in parse_cad_sch()
+procedure( print_bool(p indent attr attr_name)
+    if( attr then
+        fprintf( p "%s%s: true\n" indent attr_name )
+    else
+        fprintf( p "%s%s: false\n" indent attr_name )
+    )
+)
 
 defMathConstants('MyConsts)
 ; Parse the netlist of the given cellview.
 ; Works on schematic and veriloga and symbol.
 procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
-    let( (skip cv p indent direction shp_status shp_ptr inst term_cnt
-          inst_cnt term_type sig_type is_primitive xform_idx prop_cnt align_type obj_type port_cnt)
+    let( (skip cv p indent shp_status shp_ptr inst term_cnt inst_cnt prop_cnt obj_type path_enum)
         skip = 0
         if(view_name == "schematic" then
             unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
@@ -159,14 +288,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
             fprintf( p "%scell_name: %s\n" indent cell_name )
             fprintf( p "%sview_name: %s\n" indent view_name )
 
-            ; print bbox
-            fprintf( p "%sbbox:\n" indent )
-            indent = "  "
-            foreach( pair cv~>bBox
-                foreach( elem pair
-                    fprintf( p "%s- %d\n" indent round(elem * cv~>DBUPerUU) )
-                )
-            )
+            print_bbox(p indent cv~>bBox cv~>DBUPerUU)
 
             ; print terminals
             indent = ""
@@ -191,38 +313,12 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
                         fprintf( p "%s  net: \"\"\n" indent )
 
-                        ; print bbox
-                        fprintf( p "%s  bbox:\n" indent )
-                        foreach( pair shape~>bBox
-                            foreach( elem pair
-                                fprintf( p "%s    - %d\n" indent round(elem * cv~>DBUPerUU) )
-                            )
-                        )
+                        indent = "        "
+                        print_bbox(p indent shape~>bBox cv~>DBUPerUU)
 
                         indent = "    "
-                        ; get stype
-                        if(shape~>net~>sigType == "signal" then
-                            sig_type = 0
-                        else if(shape~>net~>sigType == "supply" then
-                            sig_type = 1
-                        else
-                            ; shape~>net~>sigType == "ground"
-                            sig_type = 2
-                            )
-                        )
-                        fprintf( p "%sstype: %d\n" indent sig_type )
-
-                        ; get ttype
-                        if(shape~>pin~>term~>direction == "inputOutput" then
-                            term_type = 2
-                        else if(shape~>pin~>term~>direction == "input" then
-                            term_type = 0
-                        else
-                            ; shape~>pin~>term~>direction == "output"
-                            term_type = 1
-                            )
-                        )
-                        fprintf( p "%sttype: %d\n" indent term_type )
+                        print_sig_type(p indent shape~>net~>sigType)
+                        print_term_type_from_direction(p indent shape~>pin~>term~>direction)
                     )
                 )
             else
@@ -259,39 +355,15 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%scell_name: %s\n" indent inst~>cellName )
                         fprintf( p "%sview_name: %s\n" indent inst~>viewName )
 
-                        fprintf( p "%sxform:\n" indent )
-                        xform_idx = 0
-                        foreach( xf inst~>transform
-                            if(xform_idx == 1 then
-                                fprintf( p "%s  - %s\n" indent xf)
-                            else if(xform_idx == 0 then
-                                foreach( xy xf
-                                    fprintf( p "%s  - %d\n" indent round(xy * cv~>DBUPerUU))
-                                )
-                            ))
-                            xform_idx++
-                        )
-
-                        ; print bbox
-                        fprintf( p "%sbbox:\n" indent )
-                        foreach( pair inst~>bBox
-                            foreach( elem pair
-                                fprintf( p "%s  - %d\n" indent round(elem * cv~>DBUPerUU) )
-                            )
-                        )
+                        print_xform(p indent inst~>transform cv~>DBUPerUU)
+                        print_bbox(p indent inst~>bBox cv~>DBUPerUU)
 
                         fprintf( p "%sconnections:\n" indent )
                         fprintf( p "%s  {}\n" indent )
                         fprintf( p "%sparams:\n" indent )
                         fprintf( p "%s  {}\n" indent )
 
-                        ; get is_primitive
-                        if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
-                            is_primitive = "true"
-                        else
-                            is_primitive = "false"
-                        )
-                        fprintf( p "%sis_primitive: %s\n" indent is_primitive )
+                        print_is_primitive(p indent inst~>libName)
 
                         ; print attr
                         indent = "      "
@@ -300,49 +372,17 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%slayer: %d\n" indent shape~>layerNum )
                         fprintf( p "%spurpose: 237\n" indent )  ; get purpose number from cv?
                         fprintf( p "%snet: \"\"\n" indent )
-                        fprintf( p "%sorigin:\n" indent )
-                        foreach( _xy shape~>xy
-                            fprintf( p "%s  - %d\n" indent round(_xy * cv~>DBUPerUU) )
-                        )
+                        print_origin(p indent shape~>xy cv~>DBUPerUU)
 
-                        ; print alignment
-                        if( shape~>justify == "centerRight" then
-                            align_type = 7
-                        else if( shape~>justify == "centerLeft" then
-                            align_type = 1
-                        else if( shape~>justify == "centerCenter" then
-                            align_type = 4
-                        else if( shape~>justify == "lowerLeft" then
-                            align_type = 2
-                        else if( shape~>justify == "lowerRight" then
-                            align_type = 8
-                        else
-                            error( "Unrecognized justify = %s" shape~>justify )
-                        )))))
-                        fprintf( p "%salignment: %d\n" indent align_type )
+                        print_alignment(p indent shape~>justify)
 
                         fprintf( p "%sorient: %s\n" indent shape~>orient )
-                        if( shape~>font == "stick" then
-                            fprintf( p "%sfont: 5\n" indent )
-                        else
-                            error( "Unrecognized font = %s" shape~>font )
-                        )
+                        print_font(p indent shape~>font)
                         fprintf( p "%sheight: %d\n" indent round(shape~>height * cv~>DBUPerUU) )
-                        if( shape~>isOverbar then
-                            fprintf( p "%soverbar: true\n" indent )
-                        else
-                            fprintf( p "%soverbar: false\n" indent )
-                        )
-                        if( shape~>isVisible then
-                            fprintf( p "%svisible: true\n" indent )
-                        else
-                            fprintf( p "%svisible: false\n" indent )
-                        )
-                        if( shape~>isDrafted then
-                            fprintf( p "%sdrafting: true\n" indent )
-                        else
-                            fprintf( p "%sdrafting: false\n" indent )
-                        )
+
+                        print_bool(p indent shape~>isOverbar "overbar")
+                        print_bool(p indent shape~>isVisible "visible")
+                        print_bool(p indent shape~>isDrafted "drafting")
                         if( shape~>assocType == "attrAssocType" then
                             fprintf( p "%sattr_type: 0\n" indent )
                         else
@@ -351,29 +391,8 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%sformat: 1\n" indent )     ; get from cv?
 
                         indent = "    "
-                        ; get stype
-                        if(inst~>net~>sigType == "signal" then
-                            sig_type = 0
-                        else if(inst~>net~>sigType == "supply" then
-                            sig_type = 1
-                        else
-                            ; inst~>net~>sigType == "ground"
-                            sig_type = 2
-                            )
-                        )
-                        fprintf( p "%sstype: %d\n" indent sig_type )
-
-                        ; get ttype
-                        if(inst~>cellName == "iopin" then
-                            term_type = 2
-                        else if(inst~>cellName == "ipin" then
-                            term_type = 0
-                        else
-                            ; inst~>cellName == "opin"
-                            term_type = 1
-                            )
-                        )
-                        fprintf( p "%sttype: %d\n" indent term_type )
+                        print_sig_type(p indent inst~>net~>sigType)
+                        print_term_type_from_name(p indent inst~>cellName)
                     )
                 )
             )
@@ -402,62 +421,31 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%s- %d\n" indent obj_type )
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
                         fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
+
+                        indent = "      "
                         if( shape~>net~>name then
-                            fprintf( p "%s  net: %s\n" indent shape~>net~>name )
+                            fprintf( p "%snet: %s\n" indent shape~>net~>name )
                         else
-                            fprintf( p "%s  net: \"\"\n" indent )
+                            fprintf( p "%snet: \"\"\n" indent )
                         )
-                        fprintf( p "%s  origin:\n" indent )
-                        foreach( _xy shape~>xy
-                            fprintf( p "%s    - %d\n" indent round(_xy * cv~>DBUPerUU) )
-                        )
+                        print_origin(p indent shape~>xy cv~>DBUPerUU)
+                        print_alignment(p indent shape~>justify)
 
-                        ; print alignment
-                        if( shape~>justify == "centerRight" then
-                            align_type = 7
-                        else if( shape~>justify == "centerLeft" then
-                            align_type = 1
-                        else if( shape~>justify == "centerCenter" then
-                            align_type = 4
-                        else if( shape~>justify == "lowerLeft" then
-                            align_type = 2
-                        else if( shape~>justify == "lowerRight" then
-                            align_type = 8
-                        else
-                            error( "Unrecognized justify = %s" shape~>justify )
-                        )))))
-                        fprintf( p "%s  alignment: %d\n" indent align_type )
+                        fprintf( p "%sorient: %s\n" indent shape~>orient )
+                        print_font(p indent shape~>font)
+                        fprintf( p "%sheight: %d\n" indent round(shape~>height * cv~>DBUPerUU) )
+                        print_bool(p indent shape~>isOverbar "overbar")
+                        print_bool(p indent shape~>isVisible "visible")
+                        print_bool(p indent shape~>isDrafted "drafting")
 
-                        fprintf( p "%s  orient: %s\n" indent shape~>orient )
-                        if( shape~>font == "stick" then
-                            fprintf( p "%s  font: 5\n" indent )
-                        else
-                            error( "Unrecognized font = %s" shape~>font )
-                        )
-                        fprintf( p "%s  height: %d\n" indent round(shape~>height * cv~>DBUPerUU) )
-                        if( shape~>isOverbar then
-                            fprintf( p "%s  overbar: true\n" indent )
-                        else
-                            fprintf( p "%s  overbar: false\n" indent )
-                        )
-                        if( shape~>isVisible then
-                            fprintf( p "%s  visible: true\n" indent )
-                        else
-                            fprintf( p "%s  visible: false\n" indent )
-                        )
-                        if( shape~>isDrafted then
-                            fprintf( p "%s  drafting: true\n" indent )
-                        else
-                            fprintf( p "%s  drafting: false\n" indent )
-                        )
                         if( shape~>layerName == "device" || shape~>layerName == "instance" then
-                            fprintf( p "%s  text: \"%s\"\n" indent shape~>theLabel )
-                            fprintf( p "%s  evaluator: cdsNLPEvalText\n" indent )   ; get from cv?
+                            fprintf( p "%stext: \"%s\"\n" indent shape~>theLabel )
+                            fprintf( p "%sevaluator: cdsNLPEvalText\n" indent )   ; get from cv?
                         else
                             if(shape~>theLabel then
-                                fprintf( p "%s  text: %s\n" indent shape~>theLabel )
+                                fprintf( p "%stext: %s\n" indent shape~>theLabel )
                             else
-                                fprintf( p "%s  text: %s\n" indent shape~>net~>name )
+                                fprintf( p "%stext: %s\n" indent shape~>net~>name )
                             )
                         )
                     else
@@ -502,10 +490,11 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                             )
                             if( shape~>objType == "path" then
                                 if( shape~>pathStyle == "roundRound" then
-                                    fprintf( p "%s  style: 2\n" indent )    ; enum for round path style
+                                    path_enum = 2    ; enum for round path style
                                 else
                                     error( "Unrecognized path style = %s" shape~>pathStyle )
                                 )
+                                fprintf( p "%s  style: %d\n" indent path_enum )
                                 fprintf( p "%s  begin_ext: %d\n" indent round(shape~>beginExt * cv~>DBUPerUU) )
                                 fprintf( p "%s  end_ext: %d\n" indent round(shape~>endExt * cv~>DBUPerUU) )
                             )
@@ -522,12 +511,8 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                                     fprintf( p "%s  ang_stop: %.16f\n" indent shape~>stopAngle )
                                 )
                             )
-                            fprintf( p "%s  bbox:\n" indent )
-                            foreach( pair shape~>bBox
-                                foreach( elem pair
-                                    fprintf( p "%s    - %d\n" indent round(elem * cv~>DBUPerUU) )
-                                )
-                            )
+                            indent = "      "
+                            print_bbox(p indent shape~>bBox cv~>DBUPerUU)
                         )
                     )
                 )
@@ -550,26 +535,8 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     fprintf( p "%scell_name: %s\n" indent inst~>cellName )
                     fprintf( p "%sview_name: %s\n" indent inst~>viewName )
 
-                    fprintf( p "%sxform:\n" indent )
-                    xform_idx = 0
-                    foreach( xf inst~>transform
-                        if(xform_idx == 1 then
-                            fprintf( p "%s  - %s\n" indent xf)
-                        else if(xform_idx == 0 then
-                            foreach( xy xf
-                                fprintf( p "%s  - %d\n" indent round(xy * cv~>DBUPerUU))
-                            )
-                        ))
-                        xform_idx++
-                    )
-
-                    ; print bbox
-                    fprintf( p "%sbbox:\n" indent )
-                    foreach( pair inst~>bBox
-                        foreach( elem pair
-                            fprintf( p "%s  - %d\n" indent round(elem * cv~>DBUPerUU) )
-                        )
-                    )
+                    print_xform(p indent inst~>transform cv~>DBUPerUU)
+                    print_bbox(p indent inst~>bBox cv~>DBUPerUU)
 
                     ; print instance terminal information
                     if( !(inst~>instTerms) then
@@ -577,9 +544,6 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                     else
                         fprintf( p "%sconnections:\n" indent )
                         foreach( inst_term inst~>instTerms
-                            unless( direction = inst_term~>direction
-                                direction = ""
-                            )
                             indent = "      "
                             fprintf( p "%s%s: %s\n" indent inst_term~>name inst_term~>net~>name )
                         )
@@ -603,13 +567,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "ttt")
                         fprintf( p "%s  {}\n" indent )
                     )
 
-                    ; get is_primitive
-                    if( inst~>libName == "basic" || inst~>libName == "analogLib" || inst~>libName == "ahdlLib" || inst~>libName == "BAG_prim" then
-                        is_primitive = "true"
-                    else
-                        is_primitive = "false"
-                    )
-                    fprintf( p "%sis_primitive: %s\n" indent is_primitive )
+                    print_is_primitive(p indent inst~>libName)
                 )
             )
             when(inst_cnt == 0
