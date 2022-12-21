@@ -208,8 +208,7 @@ class BagProject:
         lay_map = get_gds_layer_map()
         obj_map = get_gds_object_map()
         self.impl_db.create_library(lib_name)
-        gds_file = Path(gds_fname).resolve()
-        self.impl_db.import_gds_file(str(gds_file), lib_name, lay_map, obj_map, self.grid)
+        self.impl_db.import_gds_file(gds_fname, lib_name, lay_map, obj_map, self.grid)
 
     def get_cells_in_library(self, lib_name):
         # type: (str) -> Sequence[str]
