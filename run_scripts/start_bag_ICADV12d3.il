@@ -232,9 +232,17 @@ procedure( print_alignment(p indent align_type)
             align_enum = 2
         else if( align_type == "lowerRight" then
             align_enum = 8
+        else if( align_type == "lowerCenter" then
+            align_enum = 5
+        else if( align_type == "upperLeft" then
+            align_enum = 0
+        else if( align_type == "upperRight" then
+            align_enum = 6
+        else if( align_type == "upperCenter" then
+            align_enum = 3
         else
             error( "Unrecognized justify = %s" align_type )
-        )))))
+        )))))))))
         fprintf( p "%salignment: %d\n" indent align_enum )
     )
 )
