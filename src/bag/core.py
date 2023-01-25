@@ -432,20 +432,22 @@ class BagProject:
 
             if gen_lay:
                 print('creating layout...')
-                if not raw:
-                    lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
-                                        exact_cell_names=exact_cell_names)
-                else:
-                    layout_file = (layout_file_override or
-                                   str(root_path / f'{impl_cell}.{layout_ext}'))
-                    lay_db.batch_layout(dut_list, output=lay_type_list[0], fname=layout_file,
+                # always create gds first
+                layout_file = (layout_file_override or
+                               str(root_path / f'{impl_cell}.{layout_ext}'))
+                lay_db.batch_layout(dut_list, output=lay_type_list[0], fname=layout_file,
+                                    exact_cell_names=exact_cell_names,
+                                    square_bracket=square_bracket)
+                for out_type in lay_type_list[1:]:
+                    cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
+                    lay_db.batch_layout(dut_list, output=out_type, fname=cur_file,
                                         exact_cell_names=exact_cell_names,
                                         square_bracket=square_bracket)
-                    for out_type in lay_type_list[1:]:
-                        cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
-                        lay_db.batch_layout(dut_list, output=out_type, fname=cur_file,
-                                            exact_cell_names=exact_cell_names,
-                                            square_bracket=square_bracket)
+                if not raw:
+                    # import the gds into Virtuoso
+                    self.import_layout(layout_file, impl_lib, impl_cell)
+                    # lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
+                    #                     exact_cell_names=exact_cell_names)
 
                 print('layout done.')
 
@@ -453,19 +455,20 @@ class BagProject:
         else:
             sch_params = params
 
-        if export_lay and not raw:
-            print('exporting layout')
-            layout_file = (layout_file_override or
-                           str(root_path / f'{impl_cell}.{layout_ext}'))
-            export_params = dict(square_bracket=square_bracket,
-                                 output_type=lay_type_list[0])
-            self.impl_db.export_layout(impl_lib, impl_cell, layout_file,
-                                       params=export_params)
-            for out_type in lay_type_list[1:]:
-                export_params['output_type'] = out_type
-                cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
-                self.impl_db.export_layout(impl_lib, impl_cell, cur_file,
-                                           params=export_params)
+        # Layout is already created as gds first, so re-exporting is not necessary.
+        # if export_lay and not raw:
+        #     print('exporting layout')
+        #     layout_file = (layout_file_override or
+        #                    str(root_path / f'{impl_cell}.{layout_ext}'))
+        #     export_params = dict(square_bracket=square_bracket,
+        #                          output_type=lay_type_list[0])
+        #     self.impl_db.export_layout(impl_lib, impl_cell, layout_file,
+        #                                params=export_params)
+        #     for out_type in lay_type_list[1:]:
+        #         export_params['output_type'] = out_type
+        #         cur_file = str(root_path / f'{impl_cell}.{out_type.extension}')
+        #         self.impl_db.export_layout(impl_lib, impl_cell, cur_file,
+        #                                    params=export_params)
 
         if sch_cls is None:
             if isinstance(sch_str, str):

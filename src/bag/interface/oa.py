@@ -46,7 +46,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Sequence, List, Dict, Optional, Any, Tuple
+from typing import TYPE_CHECKING, Sequence, List, Dict, Any, Tuple
 
 import os
 import shutil
@@ -240,4 +240,4 @@ class OAInterface(DbAccess):
                         grid: RoutingGrid) -> None:
         tr_colors = make_tr_colors(grid.tech_info)
         # self._oa_db.import_gds(gds_fname, lib_name, layer_map, obj_map, grid, tr_colors)
-        raise NotImplementedError
+        raise NotImplementedError('Use import_layout() instead.')

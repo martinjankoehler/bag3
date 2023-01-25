@@ -225,17 +225,18 @@ class DesignDB(LoggingBase):
             sch_cls = lay_master.get_schematic_class_inst()
             layout_hash = hash(lay_master.key)
             gds_file = str(tmp_dir / 'tmp.gds')
-            if export_lay:
-                self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
-                                          name_prefix=name_prefix, name_suffix=name_suffix,
-                                          exact_cell_names=exact_cell_names)
-                await self._db.async_export_layout(self._lay_db.lib_name, impl_cell, gds_file)
-            else:
-                self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.GDS,
-                                          fname=gds_file, name_prefix=name_prefix,
-                                          name_suffix=name_suffix,
-                                          exact_cell_names=exact_cell_names)
+            # always export gds first
+            self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.GDS,
+                                      fname=gds_file, name_prefix=name_prefix,
+                                      name_suffix=name_suffix,
+                                      exact_cell_names=exact_cell_names)
             assert is_valid_file(gds_file, None, 60, 1, True)
+            if export_lay:
+                await self._db.async_import_layout(gds_file, self._lay_db.lib_name, impl_cell)
+                # self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
+                #                           name_prefix=name_prefix, name_suffix=name_suffix,
+                #                           exact_cell_names=exact_cell_names)
+                # await self._db.async_export_layout(self._lay_db.lib_name, impl_cell, gds_file)
         else:
             if extract or em:
                 raise ValueError('Cannot run extraction or em simulations without layout.')

@@ -213,7 +213,9 @@ class SkillInterface(DbAccess):
 
     def create_schematics(self, lib_name: str, sch_view: str, sym_view: str,
                           content_list: Sequence[Any]) -> None:
-        raise NotImplementedError
+        # TODO: implement in SKILL
+        print('***WARNING***: Schematic export is not implemented yet.')
+        # raise NotImplementedError
 
     def create_layouts(self, lib_name: str, view: str, content_list: Sequence[Any]) -> None:
         raise NotImplementedError
@@ -224,27 +226,28 @@ class SkillInterface(DbAccess):
 
     def instantiate_layout(self, lib_name: str, content_list: Sequence[Any], lib_path: str = '', view: str = 'layout'
                            ) -> None:
-        # create library in case it doesn't exist
-        self.create_library(lib_name)
-
-        # convert parameter dictionary to pcell params list format
-        new_layout_list = []
-        for info_list in content_list:
-            new_inst_list = []
-            for inst in info_list[1]:
-                if 'params' in inst:
-                    inst = inst.copy()
-                    inst['params'] = _dict_to_pcell_params(inst['params'])
-                new_inst_list.append(inst)
-
-            new_info_list = info_list[:]
-            new_info_list[1] = new_inst_list
-            new_layout_list.append(new_info_list)
-
-        tech_lib = self.db_config['schematic']['tech_lib']
-        cmd = 'create_layout( "%s" "%s" "%s" {layout_list} )' % (lib_name, view, tech_lib)
-        in_files = {'layout_list': new_layout_list}
-        self._eval_skill(cmd, input_files=in_files)
+        raise ValueError('Deprecated: BAG should create gds which is then imported into Virtuoso')
+        # # create library in case it doesn't exist
+        # self.create_library(lib_name)
+        #
+        # # convert parameter dictionary to pcell params list format
+        # new_layout_list = []
+        # for info_list in content_list:
+        #     new_inst_list = []
+        #     for inst in info_list[1]:
+        #         if 'params' in inst:
+        #             inst = inst.copy()
+        #             inst['params'] = _dict_to_pcell_params(inst['params'])
+        #         new_inst_list.append(inst)
+        #
+        #     new_info_list = info_list[:]
+        #     new_info_list[1] = new_inst_list
+        #     new_layout_list.append(new_info_list)
+        #
+        # tech_lib = self.db_config['schematic']['tech_lib']
+        # cmd = 'create_layout( "%s" "%s" "%s" {layout_list} )' % (lib_name, view, tech_lib)
+        # in_files = {'layout_list': new_layout_list}
+        # self._eval_skill(cmd, input_files=in_files)
 
     def release_write_locks(self, lib_name: str, cell_view_list: Sequence[Tuple[str, str]]) -> None:
         cmd = 'release_write_locks( "%s" {cell_view_list} )' % lib_name
@@ -375,7 +378,7 @@ class SkillInterface(DbAccess):
 
     def import_gds_file(self, gds_fname: str, lib_name: str, layer_map: str, obj_map: str,
                         grid: RoutingGrid) -> None:
-        raise NotImplementedError
+        raise NotImplementedError('Use import_layout() instead.')
 
     def _import_design(self, lib_name: str, cell_name: str, view_name: str, cell_list: List[Tuple[str, str]]) -> None:
         """Recursive helper for import_design_library and import_sch_cellview.
