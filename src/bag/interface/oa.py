@@ -126,7 +126,7 @@ class OAInterface(DbAccess):
         raise NotImplementedError('Not implemented yet.')
 
     def create_schematics(self, lib_name: str, sch_view: str, sym_view: str,
-                          content_list: Sequence[Any]) -> None:
+                          content_list: Sequence[Any], lib_path: str = '') -> None:
         # self._oa_db.implement_sch_list(lib_name, sch_view, sym_view, content_list)
         raise NotImplementedError
 

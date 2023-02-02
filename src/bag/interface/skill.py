@@ -58,17 +58,17 @@ from .database import DbAccess
 from .zmqwrapper import ZMQDealer
 
 
-def _dict_to_pcell_params(table):
+def _dict_to_pcell_params(table: Dict[str, Any]) -> List[Any]:
     """Convert given parameter dictionary to pcell parameter list format.
 
     Parameters
     ----------
-    table : dict[str, any]
+    table : Dict[str, Any]
         the parameter dictionary.
 
     Returns
     -------
-    param_list : list[any]
+    param_list : List[Any]
         the Pcell parameter list
     """
     param_list = []
@@ -90,12 +90,12 @@ def _dict_to_pcell_params(table):
     return param_list
 
 
-def to_skill_list_str(pylist):
+def to_skill_list_str(pylist: List[str]) -> str:
     """Convert given python list to a skill list string.
 
     Parameters
     ----------
-    pylist : list[str]
+    pylist : List[str]
         a list of string.
 
     Returns
@@ -106,6 +106,49 @@ def to_skill_list_str(pylist):
     """
     content = ' '.join((f'"{val}"' for val in pylist))
     return f"'( {content} )"
+
+
+def dict_to_item_list(table: Dict[str, Any]) -> List[List[str]]:
+    """Given a Python dictionary, convert to sorted item list.
+
+    Parameters
+    ----------
+    table : Dict[str, Any]
+        a Python dictionary where the keys are strings.
+
+    Returns
+    -------
+    assoc_list : List[List[str]]
+        the sorted item list representation of the given dictionary.
+    """
+    return [[key, table[key]] for key in sorted(table.keys())]
+
+
+def format_inst_map(inst_map: Dict[str, Any]) -> List[List[Any]]:
+    """Given instance map from DesignModule, format it for database changes.
+
+    Parameters
+    ----------
+    inst_map : Dict[str, Any]
+        the instance map created by DesignModule.
+
+    Returns
+    -------
+    ans : List[List[Any]]
+        the database change instance map.
+    """
+    ans = []
+    for old_inst_name, rinst_list in inst_map.items():
+        new_rinst_list = [dict(name=rinst['name'],
+                               lib_name=rinst['lib_name'],
+                               cell_name=rinst['cell_name'],
+                               params=dict_to_item_list(rinst['params']),
+                               term_mapping=dict_to_item_list(rinst['term_mapping']),
+                               dx=rinst['dx'],
+                               dy=rinst['dy'],
+                               ) for rinst in rinst_list]
+        ans.append([old_inst_name, new_rinst_list])
+    return ans
 
 
 class SkillInterface(DbAccess):
@@ -212,10 +255,25 @@ class SkillInterface(DbAccess):
         self._eval_skill(cmd, input_files=in_files)
 
     def create_schematics(self, lib_name: str, sch_view: str, sym_view: str,
-                          content_list: Sequence[Any]) -> None:
-        # TODO: implement in SKILL
-        print('***WARNING***: Schematic export is not implemented yet.')
-        # raise NotImplementedError
+                          content_list: Sequence[Any], lib_path: str = '') -> None:
+        template_list, change_list = [], []
+        for content in content_list:
+            if content is not None:
+                impl_cell, (master_lib, master_cell, pin_map, inst_map, new_pins) = content
+
+                # add to template list
+                template_list.append([master_lib, master_cell, impl_cell])
+
+                # construct change object
+                change = dict(
+                    name=impl_cell,
+                    pin_map=dict_to_item_list(pin_map),
+                    inst_list=format_inst_map(inst_map),
+                    new_pins=new_pins,
+                )
+                change_list.append(change)
+
+        self.create_implementation(lib_name, template_list, change_list, lib_path=lib_path)
 
     def create_layouts(self, lib_name: str, view: str, content_list: Sequence[Any]) -> None:
         raise NotImplementedError

@@ -46,7 +46,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Type, Optional, Any
+from typing import TYPE_CHECKING, Type, Optional, Any, Mapping
 
 from ..util.cache import Param
 
@@ -69,7 +69,7 @@ class SchInstance:
     """
 
     def __init__(self, db: ModuleDB, inst_ptr: PySchInstRef,
-                 master: Optional[Module] = None) -> None:
+                 master: Optional[Module] = None, prev_name: str = '', dx: int = 0, dy: int = 0) -> None:
         self._db: ModuleDB = db
         self._master: Optional[Module] = master
         self._ptr: PySchInstRef = inst_ptr
@@ -87,6 +87,9 @@ class SchInstance:
             sch_cls = master.__class__
 
         self._sch_cls: Optional[Type[Module]] = sch_cls
+        self._prev_name = prev_name
+        self._dx: int = dx
+        self._dy: int = dy
 
     @property
     def database(self) -> ModuleDB:
@@ -117,6 +120,21 @@ class SchInstance:
     def master_cell_name(self) -> str:
         """str: the cell name of the master object"""
         return self.cell_name if self.master is None else self.master.cell_name
+
+    @property
+    def prev_name(self) -> str:
+        """str: the instance name before being arrayed or renamed; empty if instance is not arrayed or renamed."""
+        return self._prev_name
+
+    @property
+    def dx(self) -> int:
+        """int: the X-shift of this instance from the master location"""
+        return self._dx
+
+    @property
+    def dy(self) -> int:
+        """int: the Y-shift of this instance from the master location"""
+        return self._dy
 
     @property
     def static(self) -> bool:
@@ -252,6 +270,16 @@ class SchInstance:
             the resulting net name.  Empty string if given terminal is not found.
         """
         return self._ptr.get_connection(term_name)
+
+    def connections(self) -> Mapping[str, str]:
+        """Convert the iterator method into a dictionary representation.
+
+        Returns
+        -------
+        connections : Mapping[str, str]
+            the connections dictionary
+        """
+        return {_term: _net for _term, _net in self._ptr.connections()}
 
     def get_master_lib_name(self, impl_lib: str) -> str:
         """Returns the master library name.

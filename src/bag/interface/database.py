@@ -337,7 +337,7 @@ class DbAccess(InterfaceBase, abc.ABC):
 
     @abc.abstractmethod
     def create_schematics(self, lib_name: str, sch_view: str, sym_view: str,
-                          content_list: Sequence[Any]) -> None:
+                          content_list: Sequence[Any], lib_path: str = '') -> None:
         """Create the given schematics in CAD database.
 
         Precondition: the library already exists, all cellviews are writable (i.e. they have been
@@ -353,6 +353,8 @@ class DbAccess(InterfaceBase, abc.ABC):
             symbol view name.
         content_list : Sequence[Any]
             list of schematics to create.
+        lib_path : str
+            the path to create the library in.  If empty, use default location.
         """
         pass
 
@@ -650,7 +652,7 @@ class DbAccess(InterfaceBase, abc.ABC):
             self.release_write_locks(lib_name, cell_view_list)
 
         self.create_library(lib_name, lib_path=lib_path)
-        self.create_schematics(lib_name, sch_view, sym_view, content_list)
+        self.create_schematics(lib_name, sch_view, sym_view, content_list, lib_path)
 
         if cell_view_list:
             self.refresh_cellviews(lib_name, cell_view_list)
