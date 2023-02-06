@@ -662,7 +662,7 @@ class Module(DesignMaster):
         db = orig_inst.database
         cur_dx = cur_dy = 0
         if dx == 0 and dy == 0:
-            dx = 160    # magic number: dbu_per_uu
+            dx = orig_inst.width
         for name in inst_name_list:
             inst_ptr = self._cv.get_inst_ref(name)
             if orig_inst.prev_name:

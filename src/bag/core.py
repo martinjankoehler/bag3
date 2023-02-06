@@ -53,6 +53,7 @@ import os
 import shutil
 import pprint
 from pathlib import Path
+import time
 
 from pybag.enum import DesignOutput, SupplyWrapMode, LogLevel
 from pybag.core import PySchCellViewInfo
@@ -432,6 +433,7 @@ class BagProject:
 
             if gen_lay:
                 print('creating layout...')
+                t0 = time.perf_counter()
                 # always create gds first
                 layout_file = (layout_file_override or
                                str(root_path / f'{impl_cell}.{layout_ext}'))
@@ -449,7 +451,8 @@ class BagProject:
                     # lay_db.batch_layout(dut_list, output=DesignOutput.LAYOUT,
                     #                     exact_cell_names=exact_cell_names)
 
-                print('layout done.')
+                t1 = time.perf_counter()
+                print(f'layout done: time taken = {t1 - t0}')
 
             sch_params = lay_master.sch_params
         else:
@@ -508,8 +511,10 @@ class BagProject:
 
             if not raw:
                 print('creating schematic...')
+                t0 = time.perf_counter()
                 sch_db.batch_schematic(dut_list, exact_cell_names=exact_cell_names)
-                print('schematic done.')
+                t1 = time.perf_counter()
+                print(f'schematic done: time taken = {t1 - t0}')
 
             if yaml_file:
                 sch_db.batch_schematic(dut_list, output=DesignOutput.YAML, fname=yaml_file,
@@ -517,6 +522,7 @@ class BagProject:
 
             if netlist_file:
                 print('creating netlist...')
+                t0 = time.perf_counter()
                 final_netlist = netlist_file
                 if sim_netlist:
                     final_netlist_type = self._sim.netlist_type
@@ -540,7 +546,8 @@ class BagProject:
                                            cv_info_out=cv_info_out, flat=flat,
                                            exact_cell_names=exact_cell_names,
                                            square_bracket=square_bracket)
-                print('netlisting done.')
+                t1 = time.perf_counter()
+                print(f'netlisting done: time taken = {t1 - t0}')
 
             if verilog_shell_path is not None:
                 sch_db.batch_schematic(dut_list, output=DesignOutput.VERILOG, shell=True,
