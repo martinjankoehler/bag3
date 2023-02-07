@@ -232,6 +232,7 @@ class DesignDB(LoggingBase):
                                       exact_cell_names=exact_cell_names)
             assert is_valid_file(gds_file, None, 60, 1, True)
             if export_lay:
+                self._db.create_library(self._lay_db.lib_name)
                 await self._db.async_import_layout(gds_file, self._lay_db.lib_name, impl_cell)
                 # self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
                 #                           name_prefix=name_prefix, name_suffix=name_suffix,

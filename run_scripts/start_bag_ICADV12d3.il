@@ -1098,9 +1098,6 @@ procedure( get_instance_terminal_wires(sch inst "gg")
                 )
             )
         )
-        printf("--------------------\n")
-        printf("inst_name %s ans %A net_map %A\n" inst~>name ans net_map)
-        printf("--------------------\n")
         list(ans net_map)
     )
 )
@@ -1182,8 +1179,6 @@ procedure( modify_instance_terminal(sch inst wire_list net_map term_mapping "ggl
                     ; only create terminal that's present in the current master
                     inst_term = dbCreateInstTerm(nil inst db_term)
                     inst_pin = car(inst_term~>term~>pins)~>fig
-                    printf("old_name %s new_name %s db_term %A\n" old_name new_name db_term)
-                    printf("inst_term %A inst_pin %A bbox %A\n" inst_term inst_pin inst_pin~>bBox)
                     bbox = dbTransformBBox(inst_pin~>bBox inst~>transform)
                     xval = (xCoord(car(bbox)) + xCoord(cadr(bbox))) / 2.0
                     yval = (yCoord(car(bbox)) + yCoord(cadr(bbox))) / 2.0
@@ -1269,30 +1264,17 @@ procedure( modify_schematic_content(sch_cv inst_list "gl")
                 yb = yCoord(car(inst_obj~>bBox))
                 xr = xCoord(cadr(inst_obj~>bBox))
                 yt = yCoord(cadr(inst_obj~>bBox))
-                ; TODO: not implementing xshift and yshift as algorithm is too complicated
-                ; xshift = round2((xr - xl + snap_dist) / snap_dist) * snap_dist
-                ; yshift = round2((yt - yb + snap_dist) / snap_dist) * snap_dist
 
                 foreach( rinst rinst_list
                     if(rinst->dx == 0 then
                         xcoord = 0
                     else
                         xcoord = round2((rinst->dx / dbu_per_uu) / snap_dist) * snap_dist
-                    ;else if( abs(rinst->dx / dbu_per_uu) > xshift then
-                    ;        xcoord = round2((rinst->dx / dbu_per_uu) / snap_dist) * snap_dist
-                    ;     else
-                    ;        xcoord = xshift
-                    ;     )
                     )
                     if(rinst->dy == 0 then
                         ycoord = 0
                     else
                         ycoord = round2((rinst->dy / dbu_per_uu) / snap_dist) * snap_dist
-                    ;else if( abs(rinst->dy / dbu_per_uu) > yshift then
-                    ;        ycoord = round2((rinst->dy / dbu_per_uu) / snap_dist) * snap_dist
-                    ;     else
-                    ;        ycoord = yshift
-                    ;     )
                     )
 
                     transform = list(xcoord:ycoord "R0" 1.0)
