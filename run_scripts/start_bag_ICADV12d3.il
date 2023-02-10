@@ -372,7 +372,7 @@ defMathConstants('MyConsts)
 ; Parse the netlist of the given cellview.
 ; Works on schematic and veriloga and symbol.
 procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
-    let( (skip cv p indent shp_status shp_ptr inst term_cnt inst_cnt prop_cnt obj_type path_enum)
+    let( (skip cv p indent shp_status shp_ptr inst term_cnt inst_cnt prop_cnt obj_type purp_type path_enum)
         skip = 0
         if(view_name == "schematic" then
             unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
@@ -518,11 +518,15 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                     fprintf( p "%s-\n" indent )
 
                     indent = "    "
-                    if( shape~>purpose == "label" || shape~>objType == "label"  then
-                        if( (shape~>layerName == "device" || shape~>layerName == "instance") && shape~>purpose == "label" then
-                            obj_type = 8   ; enum for device label and instance label
-                        else if( shape~>layerName == "wire" || shape~>layerName == "pin" || shape~>objType == "label" then
+                    if( shape~>objType == "label"  then
+                        if( shape~>layerName == "wire" || shape~>layerName == "pin" then
                             obj_type = 7   ; enum for wire label and pin label
+                        else if( shape~>layerName == "device" || shape~>layerName == "instance" then
+                            if( shape~>purpose == "annotate" then
+                                obj_type = 7   ; enum for device annotate
+                            else
+                                obj_type = 8   ; enum for device label and instance label
+                            )
                         else
                             error( "Unrecognized layerName = %s" shape~>layerName )
                         ))
@@ -530,10 +534,13 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
 
                         if( shape~>purpose == "label" then
-                            fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
+                            purp_type = 237    ; get purpose number from cv?
+                        else if( shape~>purpose == "annotate" then
+                            purp_type = 240    ; get purpose number from cv?
                         else
-                            fprintf( p "%s  purpose: 240\n" indent )    ; get purpose number from cv?
-                        )
+                            error( "Unrecognized purpose = %s" shape~>purpose )
+                        ))
+                        fprintf( p "%s  purpose: %d\n" indent purp_type )
 
                         indent = "      "
                         if( shape~>net~>name then
@@ -552,9 +559,11 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                         print_bool(p indent shape~>isDrafted "drafting")
 
                         if( shape~>layerName == "device" || shape~>layerName == "instance" then
-                            fprintf( p "%stext: \"%s\"\n" indent shape~>theLabel )
                             if( shape~>purpose == "label" then
+                                fprintf( p "%stext: \"%s\"\n" indent shape~>theLabel )
                                 fprintf( p "%sevaluator: cdsNLPEvalText\n" indent )   ; get from cv?
+                            else
+                                fprintf( p "%stext: %s\n" indent shape~>theLabel )
                             )
                         else
                             if(shape~>theLabel then
@@ -584,7 +593,7 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                         else if( shape~>purpose == "drawing1" then
                             fprintf( p "%s  purpose: 241\n" indent )    ; get purpose number from cv?
                         else
-                            error( "Unexpected purpose = %s" shape~>purpose )
+                            error( "Unrecognized purpose = %s" shape~>purpose )
                         ))
                         if( shape~>net then
                             fprintf( p "%s  net: %s\n" indent shape~>net~>name )
