@@ -350,9 +350,11 @@ procedure( print_font(p indent font_type)
     let( (font_enum)
         if( font_type == "stick" then
             font_enum = 5
+        else if( font_type == "roman" then
+            font_enum = 3
         else
             error( "Unrecognized font = %s" font_type )
-        )
+        ))
         fprintf( p "%sfont: %d\n" indent font_enum )
     )
 )
@@ -516,17 +518,22 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                     fprintf( p "%s-\n" indent )
 
                     indent = "    "
-                    if( shape~>purpose == "label" then
-                        if( shape~>layerName == "wire" || shape~>layerName == "pin" then
-                            obj_type = 7   ; enum for wire label and pin label
-                        else if( shape~>layerName == "device" || shape~>layerName == "instance" then
+                    if( shape~>purpose == "label" || shape~>objType == "label"  then
+                        if( (shape~>layerName == "device" || shape~>layerName == "instance") && shape~>purpose == "label" then
                             obj_type = 8   ; enum for device label and instance label
+                        else if( shape~>layerName == "wire" || shape~>layerName == "pin" || shape~>objType == "label" then
+                            obj_type = 7   ; enum for wire label and pin label
                         else
                             error( "Unrecognized layerName = %s" shape~>layerName )
                         ))
                         fprintf( p "%s- %d\n" indent obj_type )
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
-                        fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
+
+                        if( shape~>purpose == "label" then
+                            fprintf( p "%s  purpose: 237\n" indent )    ; get purpose number from cv?
+                        else
+                            fprintf( p "%s  purpose: 240\n" indent )    ; get purpose number from cv?
+                        )
 
                         indent = "      "
                         if( shape~>net~>name then
@@ -546,7 +553,9 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
 
                         if( shape~>layerName == "device" || shape~>layerName == "instance" then
                             fprintf( p "%stext: \"%s\"\n" indent shape~>theLabel )
-                            fprintf( p "%sevaluator: cdsNLPEvalText\n" indent )   ; get from cv?
+                            if( shape~>purpose == "label" then
+                                fprintf( p "%sevaluator: cdsNLPEvalText\n" indent )   ; get from cv?
+                            )
                         else
                             if(shape~>theLabel then
                                 fprintf( p "%stext: %s\n" indent shape~>theLabel )
