@@ -543,8 +543,11 @@ class Module(DesignMaster):
         """
         success = self._cv.remove_instance(inst_name)
         if success:
+            inst = self.instances[inst_name]
+            if not inst.prev_name:
+                # this is an original instance in the schematic template
+                self.deleted_instances.append(inst_name)
             del self.instances[inst_name]
-            self.deleted_instances.append(inst_name)
         return success
 
     def delete_instance(self, inst_name: str) -> bool:
