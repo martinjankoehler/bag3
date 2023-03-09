@@ -46,7 +46,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Type, Optional, Any, Mapping
+from typing import TYPE_CHECKING, Type, Optional, Any, Mapping, Union
 
 from ..util.cache import Param
 
@@ -272,7 +272,7 @@ class SchInstance:
         return self._ptr.get_connection(term_name)
 
     def connections(self) -> Mapping[str, str]:
-        """Convert the iterator method into a dictionary representation.
+        """Convert the connections iterator method into a dictionary representation.
 
         Returns
         -------
@@ -280,6 +280,16 @@ class SchInstance:
             the connections dictionary
         """
         return {_term: _net for _term, _net in self._ptr.connections()}
+
+    def params(self) -> Mapping[str, Union[int, float, bool, str]]:
+        """Convert the params iterator method into a dictionary representation.
+
+        Returns
+        -------
+        params : Mapping[str, Union[int, float, bool, str]]
+            the connections dictionary
+        """
+        return {_key: _val for _key, _val in self._ptr.params()}
 
     def get_master_lib_name(self, impl_lib: str) -> str:
         """Returns the master library name.
