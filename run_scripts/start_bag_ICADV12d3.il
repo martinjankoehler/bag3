@@ -317,6 +317,32 @@ procedure( print_origin(p indent origin dbu_per_uu)
     )
 )
 
+; This function is used to print the purpose enum in parse_cad_sch()
+procedure( print_purpose(p indent purp_type)
+    let( (purp_enum)
+        if( purp_type == "drawing" then
+            purp_enum = -1
+        else if( purp_type == "label" then
+            purp_enum = 237
+        else if( purp_type == "annotate" then
+            purp_enum = 240
+        else if( purp_type == "drawing1" then
+            purp_enum = 241
+        else if( purp_type == "drawing7" then
+            purp_enum = 247
+        else if( purp_type == "drawing8" then
+            purp_enum = 248
+        else
+            error( "Unrecognized purpose = %s" purp_type )
+        ))))))
+        if( purp_enum == -1 then
+            fprintf( p "%spurpose: 4294967295\n" indent )
+        else
+            fprintf( p "%spurpose: %d\n" indent purp_enum )
+        )
+    )
+)
+
 ; This function is used to print the alignment enum in parse_cad_sch()
 procedure( print_alignment(p indent align_type)
     let( (align_enum)
@@ -372,7 +398,7 @@ defMathConstants('MyConsts)
 ; Parse the netlist of the given cellview.
 ; Works on schematic and veriloga and symbol.
 procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
-    let( (skip cv p indent shp_status shp_ptr inst term_cnt inst_cnt prop_cnt obj_type purp_type path_enum)
+    let( (skip cv p indent shp_status shp_ptr inst term_cnt inst_cnt prop_cnt obj_type path_enum)
         skip = 0
         if(view_name == "schematic" then
             unless( cv = dbOpenCellViewByType( lib_name cell_name view_name nil "r" )
@@ -519,30 +545,16 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
 
                     indent = "    "
                     if( shape~>objType == "label"  then
-                        if( shape~>layerName == "wire" || shape~>layerName == "pin" then
-                            obj_type = 7   ; enum for wire label and pin label
-                        else if( shape~>layerName == "device" || shape~>layerName == "instance" then
-                            if( shape~>purpose == "annotate" then
-                                obj_type = 7   ; enum for device annotate
-                            else
-                                obj_type = 8   ; enum for device label and instance label
-                            )
+                        if( shape~>labelType == "normalLabel" then
+                            obj_type = 7
                         else
-                            error( "Unrecognized layerName = %s" shape~>layerName )
-                        ))
+                            obj_type = 8
+                        )
                         fprintf( p "%s- %d\n" indent obj_type )
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
 
-                        if( shape~>purpose == "label" then
-                            purp_type = 237    ; get purpose number from cv?
-                        else if( shape~>purpose == "annotate" then
-                            purp_type = 240    ; get purpose number from cv?
-                        else
-                            error( "Unrecognized purpose = %s" shape~>purpose )
-                        ))
-                        fprintf( p "%s  purpose: %d\n" indent purp_type )
-
                         indent = "      "
+                        print_purpose(p indent shape~>purpose)
                         if( shape~>net~>name then
                             fprintf( p "%snet: %s\n" indent shape~>net~>name )
                         else
@@ -558,19 +570,22 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                         print_bool(p indent shape~>isVisible "visible")
                         print_bool(p indent shape~>isDrafted "drafting")
 
-                        if( shape~>layerName == "device" || shape~>layerName == "instance" then
-                            if( shape~>purpose == "label" then
-                                fprintf( p "%stext: \"%s\"\n" indent shape~>theLabel )
-                                fprintf( p "%sevaluator: cdsNLPEvalText\n" indent )   ; get from cv?
+                        if(shape~>theLabel then
+                            if( obj_type == 8 then
+                                if( shape~>labelType == "NLPLabel" then
+                                    fprintf( p "%stext: \"%s\"\n" indent shape~>theLabel )
+                                    fprintf( p "%sevaluator: cdsNLPEvalText\n" indent )
+                                else if( shape~>labelType == "ILLabel" then
+                                    fprintf( p "%stext: %s\n" indent shape~>theLabel )
+                                    fprintf( p "%sevaluator: cdsSkillEvalText\n" indent )
+                                else
+                                    error( "Unrecognized shape~>labelType = %s" shape~>labelType )
+                                ))
                             else
                                 fprintf( p "%stext: %s\n" indent shape~>theLabel )
                             )
                         else
-                            if(shape~>theLabel then
-                                fprintf( p "%stext: %s\n" indent shape~>theLabel )
-                            else
-                                fprintf( p "%stext: %s\n" indent shape~>net~>name )
-                            )
+                            fprintf( p "%stext: %s\n" indent shape~>net~>name )
                         )
                     else
                         if( shape~>objType == "line" then
@@ -588,13 +603,11 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                         )))))
                         fprintf( p "%s- %d\n" indent obj_type )
                         fprintf( p "%s- layer: %d\n" indent shape~>layerNum )
-                        if( shape~>purpose == "drawing" then
-                            fprintf( p "%s  purpose: 4294967295\n" indent )     ; get purpose number from cv?
-                        else if( shape~>purpose == "drawing1" then
-                            fprintf( p "%s  purpose: 241\n" indent )    ; get purpose number from cv?
-                        else
-                            error( "Unrecognized purpose = %s" shape~>purpose )
-                        ))
+
+                        indent = "      "
+                        print_purpose(p indent shape~>purpose)
+
+                        indent = "    "
                         if( shape~>net then
                             fprintf( p "%s  net: %s\n" indent shape~>net~>name )
                         else
