@@ -306,7 +306,7 @@ class Module(DesignMaster):
                         name=inst_name,
                         lib_name=cur_lib,
                         cell_name=inst.master_cell_name,
-                        params={} if inst.static else inst.master.get_schematic_parameters(),
+                        params=inst.params(),
                         term_mapping=inst.connections(),
                         dx=inst.dx,
                         dy=inst.dy,
