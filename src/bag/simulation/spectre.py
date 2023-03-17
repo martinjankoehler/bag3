@@ -38,6 +38,7 @@ from .data import (
 )
 from .base import SimProcessManager, get_corner_temp
 from .hdf5 import load_sim_data_hdf5, save_sim_data_hdf5
+from .nutbin import NutBinParser
 
 # The use of pysrr to parse simulation data requires an external Python package.
 # Since this import is only required when pysrr is used, it is treated as an optional import
@@ -283,8 +284,12 @@ class SpectreInterface(SimProcessManager):
         hdf5_path: Path = cwd_path / f'{sim_tag}.hdf5'
 
         try:
-            if raw_path.is_dir():
-                shutil.rmtree(str(raw_path))
+            if self._out_fmt.startswith('psf'):
+                if raw_path.is_dir():
+                    shutil.rmtree(str(raw_path))
+            elif self._out_fmt.startswith('nut'):
+                if raw_path.is_file():
+                    raw_path.unlink()
         except FileNotFoundError:  # Ignore errors from race conditions
             pass
 
@@ -296,9 +301,10 @@ class SpectreInterface(SimProcessManager):
         if ret_code is None or ret_code != 0:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
-        # Check if raw_path is created (as a directory). Give some slack for IO latency
+        # Check if raw_path is created. Give some slack for IO latency
         iter_cnt = 0
-        while not raw_path.is_dir():
+        while not ((self._out_fmt.startswith('psf') and raw_path.is_dir()) or
+                   (self._out_fmt.startswith('nut') and raw_path.is_file())):
             if iter_cnt > 120:
                 raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
             time.sleep(1)
@@ -312,38 +318,43 @@ class SpectreInterface(SimProcessManager):
         if 'spectre completes with 0 errors' not in log_contents:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
-        # check if Monte Carlo sim
-        for fname in raw_path.iterdir():
-            if str(fname).endswith('Distributed'):
-                analysis_info: Path = fname / 'Analysis.info'
-                with open_file(analysis_info, 'r') as f:
-                    line = f.readline()
-                num_proc = int(re.search(r'(.*) (\d*)\n', line).group(2))
+        if self._out_fmt.startswith('psf'):
+            # check if Monte Carlo sim
+            for fname in raw_path.iterdir():
+                if str(fname).endswith('Distributed'):
+                    analysis_info: Path = fname / 'Analysis.info'
+                    with open_file(analysis_info, 'r') as f:
+                        line = f.readline()
+                    num_proc = int(re.search(r'(.*) (\d*)\n', line).group(2))
 
-                raw_sep: Path = raw_path / f'{num_proc}'
-                for fname_sep in raw_sep.iterdir():
-                    if str(fname_sep).endswith('.mapping'):
-                        # Monte Carlo sim in multiprocessing mode
-                        mapping_lines = []
-                        for i in range(num_proc):
-                            with open_file(raw_path / f'{i + 1}' / fname_sep.name, 'r') as fr:
-                                for line_in in fr:
-                                    mapping_lines.append(line_in)
+                    raw_sep: Path = raw_path / f'{num_proc}'
+                    for fname_sep in raw_sep.iterdir():
+                        if str(fname_sep).endswith('.mapping'):
+                            # Monte Carlo sim in multiprocessing mode
+                            mapping_lines = []
+                            for i in range(num_proc):
+                                with open_file(raw_path / f'{i + 1}' / fname_sep.name, 'r') as fr:
+                                    for line_in in fr:
+                                        mapping_lines.append(line_in)
 
-                        await self._format_monte_carlo(mapping_lines, cwd_path, compress, rtol,
-                                                       atol, hdf5_path)
-                        return
+                            await self._format_monte_carlo(mapping_lines, cwd_path, compress, rtol,
+                                                           atol, hdf5_path)
+                            return
 
-            elif str(fname).endswith('.mapping'):
-                # Monte Carlo sim in single processing mode
-                mapping_lines = open_file(fname, 'r').readlines()
-                await self._format_monte_carlo(mapping_lines, cwd_path, compress, rtol, atol,
-                                               hdf5_path)
-                return
+                elif str(fname).endswith('.mapping'):
+                    # Monte Carlo sim in single processing mode
+                    mapping_lines = open_file(fname, 'r').readlines()
+                    await self._format_monte_carlo(mapping_lines, cwd_path, compress, rtol, atol,
+                                                   hdf5_path)
+                    return
 
         # convert to HDF5
-        log_path = cwd_path / 'srr_to_hdf5.log'
-        await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path, cwd_path)
+        if self._out_fmt.startswith('psf'):
+            log_path = cwd_path / 'srr_to_hdf5.log'
+            await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path, cwd_path)
+        elif self._out_fmt.startswith('nut'):
+            nbp = NutBinParser(raw_path, rtol, atol)
+            save_sim_data_hdf5(nbp.sim_data, hdf5_path, compress)
 
     async def _srr_to_hdf5(self, compress: bool, rtol: float, atol: float, raw_path: Path,
                            hdf5_path: Path, log_path: Path, cwd_path: Path) -> None:
