@@ -285,6 +285,14 @@ class SpectreInterface(SimProcessManager):
         raw_path: Path = cwd_path / f'{sim_tag}.raw'
         hdf5_path: Path = cwd_path / f'{sim_tag}.hdf5'
 
+        if self._out_fmt.startswith('nut'):
+            for fname in cwd_path.iterdir():
+                if fname.name.startswith(raw_path.name):
+                    if fname.is_dir():
+                        shutil.rmtree(str(fname))
+                    elif fname.is_file():
+                        fname.unlink()
+
         try:
             if self._out_fmt.startswith('psf'):
                 if raw_path.is_dir():
@@ -355,7 +363,12 @@ class SpectreInterface(SimProcessManager):
             log_path = cwd_path / 'srr_to_hdf5.log'
             await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path, cwd_path)
         elif self._out_fmt.startswith('nut'):
-            nbp = NutBinParser(raw_path, rtol, atol)
+            nbp_mc = False
+            for fname in cwd_path.iterdir():
+                if str(fname).endswith('.mapping'):
+                    nbp_mc = True
+                    break
+            nbp = NutBinParser(raw_path, rtol, atol, nbp_mc)
             save_sim_data_hdf5(nbp.sim_data, hdf5_path, compress)
 
     async def _srr_to_hdf5(self, compress: bool, rtol: float, atol: float, raw_path: Path,

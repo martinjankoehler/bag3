@@ -40,14 +40,19 @@ from .srr import combine_ana_sim_envs
 
 
 class NutBinParser:
-    def __init__(self, raw_path: Path, rtol: float, atol: float) -> None:
+    def __init__(self, raw_path: Path, rtol: float, atol: float, monte_carlo: bool) -> None:
         self._cwd_path = raw_path.parent
+        self._monte_carlo = monte_carlo
         nb_data = self.parse_raw_file(raw_path)
         self._sim_data = self.convert_to_sim_data(nb_data, rtol, atol)
 
     @property
     def sim_data(self) -> SimData:
         return self._sim_data
+
+    @property
+    def monte_carlo(self) -> bool:
+        return self._monte_carlo
 
     def parse_raw_file(self, raw_path: Path) -> Mapping[str, Any]:
         with open(raw_path, 'rb') as f:
@@ -101,7 +106,6 @@ class NutBinParser:
     @staticmethod
     def get_info_from_name(name: str) -> Mapping[str, Any]:
         # TODO: pss, pac, pnoise
-        # TODO: monte carlo
         ana_type_fmt = '[a-zA-Z]+'
         sim_env_fmt = '[a-zA-Z0-9]+_[a-zA-Z0-9]+'
         m = re.search(f'({ana_type_fmt})__({sim_env_fmt})', name)
@@ -122,6 +126,9 @@ class NutBinParser:
     def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, data: Dict[str, np.ndarray]) -> None:
         # get analysis name and sim_env
         ana_name = re.search('`.*\'', plotname).group(0)[1:-1]
+        if self.monte_carlo and not ana_name.startswith('__mc_'):
+            # ignore the nominal sim in Monte Carlo
+            return
         info = self.get_info_from_name(ana_name)
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
@@ -192,8 +199,7 @@ class NutBinParser:
             ana_dict[ana_type] = combine_ana_sim_envs(sub_ana_dict, sim_envs)
         return SimData(sim_envs, ana_dict, DesignOutput.SPECTRE)
 
-    @staticmethod
-    def convert_to_analysis_data(nb_dict: Mapping[str, Any], rtol: float, atol: float) -> AnalysisData:
+    def convert_to_analysis_data(self, nb_dict: Mapping[str, Any], rtol: float, atol: float) -> AnalysisData:
         data = {}
 
         # get sweep information
@@ -208,6 +214,13 @@ class NutBinParser:
             swp_vars = []
             swp_len = 0
             swp_combo_list = []
+
+        # get Monte Carlo information (no parametric sweep)
+        if self.monte_carlo:
+            swp_vars = ['monte_carlo']
+            swp_len = len(nb_dict['data'])
+            swp_combo_list = [np.linspace(0, swp_len - 1, swp_len, dtype=int)]
+
         swp_shape, swp_vals = _check_is_md(1, swp_combo_list, rtol, atol, None)  # single corner per set
         is_md = swp_shape is not None
         if is_md:
