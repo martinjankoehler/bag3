@@ -285,23 +285,15 @@ class SpectreInterface(SimProcessManager):
         raw_path: Path = cwd_path / f'{sim_tag}.raw'
         hdf5_path: Path = cwd_path / f'{sim_tag}.hdf5'
 
-        if self._out_fmt.startswith('nut'):
-            for fname in cwd_path.iterdir():
-                if fname.name.startswith(raw_path.name):
+        for fname in cwd_path.iterdir():
+            if fname.name.startswith(raw_path.name):
+                try:
                     if fname.is_dir():
                         shutil.rmtree(str(fname))
                     elif fname.is_file():
                         fname.unlink()
-
-        try:
-            if self._out_fmt.startswith('psf'):
-                if raw_path.is_dir():
-                    shutil.rmtree(str(raw_path))
-            elif self._out_fmt.startswith('nut'):
-                if raw_path.is_file():
-                    raw_path.unlink()
-        except FileNotFoundError:  # Ignore errors from race conditions
-            pass
+                except FileNotFoundError:  # Ignore errors from race conditions
+                    pass
 
         if hdf5_path.is_file():
             hdf5_path.unlink()

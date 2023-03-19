@@ -99,53 +99,72 @@ class NutBinParser:
         bin_data = np.fromfile(f, dtype=np.dtype(nptype).newbyteorder(">"), count=num_vars * num_points)
         data = {}
         for idx, var_name in enumerate(var_names):
-            data[var_name] = bin_data[idx::num_vars]
+            if var_name == 'freq':
+                data[var_name] = np.real(bin_data[idx::num_vars])
+            else:
+                data[var_name] = bin_data[idx::num_vars]
 
         return data
 
     @staticmethod
-    def get_info_from_name(name: str) -> Mapping[str, Any]:
-        # TODO: pss, pac, pnoise
+    def get_info_from_plotname(plotname: str) -> Mapping[str, Any]:
+        # TODO: pnoise
+        # get ana_name from plotname
+        ana_name = re.search('`.*\'', plotname).group(0)[1:-1]
+
+        # get ana_type and sim_env from ana_name
         ana_type_fmt = '[a-zA-Z]+'
         sim_env_fmt = '[a-zA-Z0-9]+_[a-zA-Z0-9]+'
-        m = re.search(f'({ana_type_fmt})__({sim_env_fmt})', name)
+        m = re.search(f'({ana_type_fmt})__({sim_env_fmt})', ana_name)
+        ana_type = m.group(1)
 
-        # get outer sweep information, if any
-        m_swp = re.findall('swp[0-9]{2}', name)
-        m_swp1 = re.findall('swp[0-9]{2}-[0-9]{3}', name)
+        # get inner sweep information from plotname, if any
+        m_in = re.search(r': (\w+) =', plotname)
+        if m_in is not None:
+            inner_sweep = m_in.group(1)
+        else:
+            inner_sweep = ''
+        if ana_type == 'pss':
+            if inner_sweep == 'freq':
+                ana_type = 'pss_fd'
+            elif inner_sweep == 'time':
+                ana_type = 'pss_td'
+            else:
+                raise NotImplementedError
+
+        # get outer sweep information from ana_name, if any
+        m_swp = re.findall('swp[0-9]{2}', ana_name)
+        m_swp1 = re.findall('swp[0-9]{2}-[0-9]{3}', ana_name)
         swp_combo = []
         for idx, val in enumerate(m_swp1):
             swp_combo.append(int(val[-3:]))
+
         return dict(
+            ana_name=ana_name,
             sim_env=m.group(2),
-            ana_type=m.group(1),
+            ana_type=ana_type,
             swp_info=m_swp,
             swp_combo=swp_combo,
+            inner_sweep=inner_sweep,
         )
 
     def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, data: Dict[str, np.ndarray]) -> None:
         # get analysis name and sim_env
-        ana_name = re.search('`.*\'', plotname).group(0)[1:-1]
+        info = self.get_info_from_plotname(plotname)
+        ana_name: str = info['ana_name']
         if self.monte_carlo and not ana_name.startswith('__mc_'):
             # ignore the nominal sim in Monte Carlo
             return
-        info = self.get_info_from_name(ana_name)
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
         # swp_info: Sequence[str] = info['swp_info']
         swp_combo: Sequence[int] = info['swp_combo']
+        inner_sweep: str = info['inner_sweep']
 
         if ana_type not in ana_dict:
             ana_dict[ana_type] = {}
 
         if sim_env not in ana_dict[ana_type]:
-            # get inner sweep, if any
-            m = re.search(r': (\w+) =', plotname)
-            if m is not None:
-                inner_sweep = m.group(1)
-            else:
-                inner_sweep = ''
-
             # get outer sweep, if any
             # swp_vars = self.parse_sweep_info(swp_info, data, f'___{ana_type}__{sim_env}__')
             ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep}
@@ -195,11 +214,12 @@ class NutBinParser:
             sim_envs = sorted(sim_env_dict.keys())
             sub_ana_dict = {}
             for sim_env, nb_dict in sim_env_dict.items():
-                sub_ana_dict[sim_env] = self.convert_to_analysis_data(nb_dict, rtol, atol)
+                sub_ana_dict[sim_env] = self.convert_to_analysis_data(nb_dict, rtol, atol, ana_type)
             ana_dict[ana_type] = combine_ana_sim_envs(sub_ana_dict, sim_envs)
         return SimData(sim_envs, ana_dict, DesignOutput.SPECTRE)
 
-    def convert_to_analysis_data(self, nb_dict: Mapping[str, Any], rtol: float, atol: float) -> AnalysisData:
+    def convert_to_analysis_data(self, nb_dict: Mapping[str, Any], rtol: float, atol: float, ana_type: str
+                                 ) -> AnalysisData:
         data = {}
 
         # get sweep information
@@ -220,6 +240,15 @@ class NutBinParser:
             swp_vars = ['monte_carlo']
             swp_len = len(nb_dict['data'])
             swp_combo_list = [np.linspace(0, swp_len - 1, swp_len, dtype=int)]
+
+        # if PAC, configure harmonic sweep
+        if ana_type == 'pac':
+            swp_vars = ['harmonic']
+            # When maxsideband > 0, spectre errors with this message:
+            # "ERROR (SPECTRE-7012): Output for analysis of type `pac' is not supported in Nutmeg."
+            swp_len = len(nb_dict['data'])
+            harmonics = swp_len // 2
+            swp_combo_list = [np.linspace(-harmonics, harmonics, swp_len, dtype=int)]
 
         swp_shape, swp_vals = _check_is_md(1, swp_combo_list, rtol, atol, None)  # single corner per set
         is_md = swp_shape is not None
