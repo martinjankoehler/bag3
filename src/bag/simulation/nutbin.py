@@ -108,7 +108,6 @@ class NutBinParser:
 
     @staticmethod
     def get_info_from_plotname(plotname: str) -> Mapping[str, Any]:
-        # TODO: pnoise
         # get ana_name from plotname
         ana_name = re.search('`.*\'', plotname).group(0)[1:-1]
 
