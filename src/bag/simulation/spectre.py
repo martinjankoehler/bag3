@@ -362,6 +362,8 @@ class SpectreInterface(SimProcessManager):
                     break
             nbp = NutBinParser(raw_path, rtol, atol, nbp_mc)
             save_sim_data_hdf5(nbp.sim_data, hdf5_path, compress)
+            # post-process HDF5 to convert to MD array
+            _process_hdf5(hdf5_path, rtol, atol)
 
     async def _srr_to_hdf5(self, compress: bool, rtol: float, atol: float, raw_path: Path,
                            hdf5_path: Path, log_path: Path, cwd_path: Path) -> None:
