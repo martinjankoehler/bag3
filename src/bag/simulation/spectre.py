@@ -286,8 +286,9 @@ class SpectreInterface(SimProcessManager):
         raw_path: Path = cwd_path / f'{sim_tag}.raw'
         hdf5_path: Path = cwd_path / f'{sim_tag}.hdf5'
 
+        # delete previous .raw and .hdf5
         for fname in cwd_path.iterdir():
-            if fname.name.startswith(raw_path.name):
+            if fname.name.startswith(raw_path.name) or fname.suffix == '.hdf5':
                 try:
                     if fname.is_dir():
                         shutil.rmtree(str(fname))
@@ -295,9 +296,6 @@ class SpectreInterface(SimProcessManager):
                         fname.unlink()
                 except FileNotFoundError:  # Ignore errors from race conditions
                     pass
-
-        if hdf5_path.is_file():
-            hdf5_path.unlink()
 
         ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
                                                            env=env, cwd=str(cwd_path))
@@ -321,7 +319,7 @@ class SpectreInterface(SimProcessManager):
         if 'spectre completes with 0 errors' not in log_contents:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
-        if self._out_fmt == 'psfxl':
+        if self._out_fmt.startswith('psf'):
             # check if Monte Carlo sim
             for fname in raw_path.iterdir():
                 if str(fname).endswith('Distributed'):
@@ -403,9 +401,15 @@ class SpectreInterface(SimProcessManager):
             idx, raw_str = reg.group(1), reg.group(2)
             raw_path: Path = cwd_path / raw_str
             hdf5_path: Path = cwd_path / f'{raw_path.name}.hdf5'
-            log_path: Path = cwd_path / f'{raw_path.name}_srr_to_hdf5.log'
-            await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path,
-                                    cwd_path)
+            if self._out_fmt == 'psfxl':
+                log_path: Path = cwd_path / f'{raw_path.name}_srr_to_hdf5.log'
+                await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path,
+                                        cwd_path)
+            elif self._out_fmt == 'psfbin':
+                lpp = LibPSFParser(raw_path, rtol, atol)
+                save_sim_data_hdf5(lpp.sim_data, hdf5_path, compress)
+                # post-process HDF5 to convert to MD array
+                _process_hdf5(hdf5_path, rtol, atol)
             sim_data_list.append(load_sim_data_hdf5(hdf5_path))
 
         # combine all SimData to one SimData

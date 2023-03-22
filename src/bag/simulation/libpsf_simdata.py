@@ -41,9 +41,8 @@ from .srr import combine_ana_sim_envs
 
 
 class LibPSFParser:
-    def __init__(self, raw_path: Path, rtol: float, atol: float, monte_carlo: bool = False) -> None:
+    def __init__(self, raw_path: Path, rtol: float, atol: float) -> None:
         self._cwd_path = raw_path.parent
-        self._monte_carlo = monte_carlo
         lp_data = self.parse_raw_folder(raw_path)
         self._sim_data = self.convert_to_sim_data(lp_data, rtol, atol)
 
@@ -51,17 +50,12 @@ class LibPSFParser:
     def sim_data(self) -> SimData:
         return self._sim_data
 
-    @property
-    def monte_carlo(self) -> bool:
-        return self._monte_carlo
-
     def parse_raw_folder(self, raw_path: Path) -> Mapping[str, Any]:
         ana_dict = {}
         for fname in raw_path.iterdir():
             # some files have multiple suffixes, so split name at first '.' to get entire suffix
             suf = fname.name.split('.', 1)[-1]
             if suf not in ['logFile', 'sweep', 'pac']:
-                # TODO: monte carlo
                 info = self.get_info_from_fname(fname.name)
                 data, inner_sweep = self.parse_raw_file(fname)
                 info['inner_sweep'] = inner_sweep
@@ -147,14 +141,9 @@ class LibPSFParser:
             harmonic=harmonic,
         )
 
-    def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any],
+    @staticmethod
+    def populate_dict(ana_dict: Dict[str, Any], info: Mapping[str, Any],
                       data: Dict[str, Union[np.ndarray, float]]) -> None:
-        # get analysis name and sim_env
-        # ana_name: str = info['ana_name']
-        # TODO: monte carlo
-        # if self.monte_carlo and not ana_name.startswith('__mc_'):
-        #     # ignore the nominal sim in Monte Carlo
-        #     return
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
         swp_key: str = info['swp_key']
@@ -212,12 +201,11 @@ class LibPSFParser:
             sim_envs = sorted(sim_env_dict.keys())
             sub_ana_dict = {}
             for sim_env, lp_dict in sim_env_dict.items():
-                sub_ana_dict[sim_env] = self.convert_to_analysis_data(lp_dict, rtol, atol, ana_type)
+                sub_ana_dict[sim_env] = self.convert_to_analysis_data(lp_dict, rtol, atol)
             ana_dict[ana_type] = combine_ana_sim_envs(sub_ana_dict, sim_envs)
         return SimData(sim_envs, ana_dict, DesignOutput.SPECTRE)
 
-    def convert_to_analysis_data(self, lp_dict: Mapping[str, Any], rtol: float, atol: float, ana_type: str
-                                 ) -> AnalysisData:
+    def convert_to_analysis_data(self, lp_dict: Mapping[str, Any], rtol: float, atol: float) -> AnalysisData:
         data = {}
 
         # get sweep information
@@ -262,12 +250,6 @@ class LibPSFParser:
                 harm_swp = []
                 swp_len = 0
                 swp_combo_list = []
-
-        # TODO: get Monte Carlo information (no parametric sweep)
-        # if self.monte_carlo:
-        #     swp_vars = ['monte_carlo']
-        #     swp_len = len(lp_data)
-        #     swp_combo_list = [np.linspace(0, swp_len - 1, swp_len, dtype=int)]
 
         swp_shape, swp_vals = _check_is_md(1, swp_combo_list, rtol, atol, None)  # single corner per set
         is_md = swp_shape is not None
