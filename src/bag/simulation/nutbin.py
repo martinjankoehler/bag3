@@ -266,7 +266,7 @@ class NutBinParser:
                 swp_vars = ['harmonic']
                 # When maxsideband > 0, spectre errors with this message:
                 # "ERROR (SPECTRE-7012): Output for analysis of type `pac' is not supported in Nutmeg."
-                harm_len = swp_len = len(nb_dict['data'])
+                harm_len = swp_len = 1
                 harmonics = harm_len // 2
                 swp_combo_list = [np.linspace(-harmonics, harmonics, harm_len, dtype=int)]
             else:
@@ -276,9 +276,18 @@ class NutBinParser:
 
         # get Monte Carlo information (no parametric sweep)
         if self.monte_carlo:
-            swp_vars = ['monte_carlo']
-            swp_len = len(nb_dict['data'])
-            swp_combo_list = [np.linspace(0, swp_len - 1, swp_len, dtype=int)]
+            swp_vars.insert(0, 'monte_carlo')
+            swp_len = len(nb_dict['data'])  # this works because only PAC harmonic may be present with maxsideband = 0
+            if ana_type == 'pac':
+                # This has PAC harmonics, since no parametric sweep is allowed with Monte Carlo
+                harm_swp = swp_combo_list[0]
+                swp_combos = []
+                for mc_idx in range(swp_len):
+                    for _harm in harm_swp:
+                        swp_combos.append([mc_idx, _harm])
+                swp_combo_list = [np.array(swp_combos)[:, i] for i in range(2)]
+            else:
+                swp_combo_list = [np.linspace(0, swp_len - 1, swp_len, dtype=int)]
 
         swp_shape, swp_vals = _check_is_md(1, swp_combo_list, rtol, atol, None)  # single corner per set
         is_md = swp_shape is not None

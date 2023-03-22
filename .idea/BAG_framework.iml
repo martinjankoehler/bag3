@@ -7,7 +7,7 @@
       <excludeFolder url="file://$MODULE_DIR$/OA" />
       <excludeFolder url="file://$MODULE_DIR$/pybag/_build" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.7" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.10" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">
