@@ -29,7 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
-from typing import Mapping, BinaryIO, Any, Dict, Sequence
+from typing import Mapping, BinaryIO, Any, Dict, Sequence, Union
 from pathlib import Path
 import numpy as np
 
@@ -71,7 +71,7 @@ class NutBinParser:
         return ana_dict
 
     @staticmethod
-    def parse_analysis(f: BinaryIO) -> Dict[str, np.ndarray]:
+    def parse_analysis(f: BinaryIO) -> Dict[str, Union[np.ndarray, float]]:
         # read flags
         flags = f.readline().decode('ascii').split()
         if flags[1] == 'real':
@@ -98,11 +98,24 @@ class NutBinParser:
         # read big endian binary data
         bin_data = np.fromfile(f, dtype=np.dtype(nptype).newbyteorder(">"), count=num_vars * num_points)
         data = {}
+        if 'dummy' in var_names and num_points == 1:
+            # single sim with no inner sweep
+            inner_sweep = False
+        else:
+            inner_sweep = True
         for idx, var_name in enumerate(var_names):
+            if var_name == 'dummy':
+                # skip dummy variable
+                continue
             if var_name == 'freq':
-                data[var_name] = np.real(bin_data[idx::num_vars])
+                # convert frequency data to real
+                _sig = np.real(bin_data[idx::num_vars])
             else:
-                data[var_name] = bin_data[idx::num_vars]
+                _sig = bin_data[idx::num_vars]
+            if not inner_sweep:
+                # no inner sweep, store singular value
+                _sig = _sig[0]
+            data[var_name] = _sig
 
         return data
 
@@ -123,6 +136,8 @@ class NutBinParser:
             inner_sweep = m_in.group(1)
         else:
             inner_sweep = ''
+
+        # For PSS, edit ana_type based on inner sweep
         if ana_type == 'pss':
             if inner_sweep == 'freq':
                 ana_type = 'pss_fd'
@@ -135,7 +150,7 @@ class NutBinParser:
         m_swp = re.findall('swp[0-9]{2}', ana_name)
         m_swp1 = re.findall('swp[0-9]{2}-[0-9]{3}', ana_name)
         swp_combo = []
-        for idx, val in enumerate(m_swp1):
+        for val in m_swp1:
             swp_combo.append(int(val[-3:]))
 
         return dict(
@@ -147,7 +162,7 @@ class NutBinParser:
             inner_sweep=inner_sweep,
         )
 
-    def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, data: Dict[str, np.ndarray]) -> None:
+    def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, data: Dict[str, Union[np.ndarray, float]]) -> None:
         # get analysis name and sim_env
         info = self.get_info_from_plotname(plotname)
         ana_name: str = info['ana_name']
@@ -226,13 +241,38 @@ class NutBinParser:
         swp_combos = nb_dict['swp_combos']
         if swp_combos:  # create sweep combinations
             num_swp = len(swp_combos[0])
-            swp_vars = [f'sweep{idx}' for idx in range(num_swp)]
+            swp_vars = [f'swp{idx:02d}' for idx in range(num_swp)]
+
+            # if PAC, configure harmonic sweep
+            if ana_type == 'pac':
+                swp_vars.append('harmonic')
+                # When maxsideband > 0, spectre errors with this message:
+                # "ERROR (SPECTRE-7012): Output for analysis of type `pac' is not supported in Nutmeg."
+                harm_len = len(nb_dict['data']) // len(swp_combos)
+                harmonics = harm_len // 2
+                harm_swp = np.linspace(-harmonics, harmonics, harm_len, dtype=int)
+                new_swp_combos = []
+                for swp_combo in swp_combos:
+                    for _harm in harm_swp:
+                        new_swp_combos.append(swp_combo + [_harm])
+                swp_combos = new_swp_combos
+                num_swp += 1
+
             swp_len = len(swp_combos)
             swp_combo_list = [np.array(swp_combos)[:, i] for i in range(num_swp)]
         else:   # no outer sweep
-            swp_vars = []
-            swp_len = 0
-            swp_combo_list = []
+            # if PAC, configure harmonic sweep
+            if ana_type == 'pac':
+                swp_vars = ['harmonic']
+                # When maxsideband > 0, spectre errors with this message:
+                # "ERROR (SPECTRE-7012): Output for analysis of type `pac' is not supported in Nutmeg."
+                harm_len = swp_len = len(nb_dict['data'])
+                harmonics = harm_len // 2
+                swp_combo_list = [np.linspace(-harmonics, harmonics, harm_len, dtype=int)]
+            else:
+                swp_vars = []
+                swp_len = 0
+                swp_combo_list = []
 
         # get Monte Carlo information (no parametric sweep)
         if self.monte_carlo:
@@ -240,38 +280,37 @@ class NutBinParser:
             swp_len = len(nb_dict['data'])
             swp_combo_list = [np.linspace(0, swp_len - 1, swp_len, dtype=int)]
 
-        # if PAC, configure harmonic sweep
-        if ana_type == 'pac':
-            swp_vars = ['harmonic']
-            # When maxsideband > 0, spectre errors with this message:
-            # "ERROR (SPECTRE-7012): Output for analysis of type `pac' is not supported in Nutmeg."
-            swp_len = len(nb_dict['data'])
-            harmonics = swp_len // 2
-            swp_combo_list = [np.linspace(-harmonics, harmonics, swp_len, dtype=int)]
-
         swp_shape, swp_vals = _check_is_md(1, swp_combo_list, rtol, atol, None)  # single corner per set
         is_md = swp_shape is not None
         if is_md:
             swp_combo = {var: swp_vals[i] for i, var in enumerate(swp_vars)}
         else:
-            swp_combo = {var: swp_combo_list for var in swp_vars}
-            swp_shape = (swp_len,)
+            raise NotImplementedError("Parametric sweeps must be formatted multi-dimensionally")
         data.update(swp_combo)
 
         # parse each signal
         if swp_len == 0:    # no outer sweep
             for sig_name, sig_y in nb_dict['data'][0].items():
-                data_shape = (*swp_shape, sig_y.shape[-1])
+                if isinstance(sig_y, float):    # no inner sweep
+                    data_shape = swp_shape
+                else:
+                    data_shape = (*swp_shape, sig_y.shape[-1])
                 _new_sig = sig_name.replace('/', '.')
                 data[_new_sig] = sig_y if _new_sig == inner_sweep else np.reshape(sig_y, data_shape)
         else:   # combine outer sweeps
             sig_names = list(nb_dict['data'][0].keys())
             for sig_name in sig_names:
                 yvecs = [nb_dict['data'][i][sig_name] for i in range(swp_len)]
-                sub_dims = tuple(yvec.shape[0] for yvec in yvecs)
-                max_dim = max(sub_dims)
-                is_same_len = all((sub_dims[i] == sub_dims[0] for i in range(swp_len)))
-                data_shape = (*swp_shape, max_dim)
+                if isinstance(yvecs[0], float):
+                    sub_dims = ()   # not used
+                    max_dim = 0     # not used
+                    is_same_len = True
+                    data_shape = swp_shape
+                else:
+                    sub_dims = tuple(yvec.shape[0] for yvec in yvecs)
+                    max_dim = max(sub_dims)
+                    is_same_len = all((sub_dims[i] == sub_dims[0] for i in range(swp_len)))
+                    data_shape = (*swp_shape, max_dim)
                 _new_sig = sig_name.replace('/', '.')
                 if not is_same_len:
                     yvecs_padded = [np.pad(yvec, (0, max_dim - dim), constant_values=np.nan)
@@ -280,7 +319,17 @@ class NutBinParser:
                     data[_new_sig] = np.reshape(sig_y, data_shape)
                 else:
                     if _new_sig == inner_sweep:
-                        data[_new_sig] = yvecs[0]
+                        same_inner = True
+                        for _yvec in yvecs[1:]:
+                            if not np.allclose(yvecs[0], _yvec, rtol=rtol, atol=atol):
+                                same_inner = False
+                                break
+                        if same_inner:
+                            data[_new_sig] = yvecs[0]
+                        else:
+                            # same length but unequal sweep values
+                            sig_y = np.stack(yvecs)
+                            data[_new_sig] = np.reshape(sig_y, data_shape)
                     else:
                         sig_y = np.stack(yvecs)
                         data[_new_sig] = np.reshape(sig_y, data_shape)
