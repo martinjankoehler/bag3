@@ -29,7 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
-from typing import Mapping, Any, Dict, Sequence, Tuple, Union, Optional
+from typing import Mapping, Any, Dict, Tuple, Union, Optional
 from pathlib import Path
 from libpsf import PSFDataSet
 import numpy as np
@@ -154,8 +154,7 @@ class LibPSFParser:
             ana_dict[ana_type] = {}
 
         if sim_env not in ana_dict[ana_type]:
-            # get outer sweep, if any
-            # swp_vars = self.parse_sweep_info(swp_info, data, f'___{ana_type}__{sim_env}__')
+            # TODO: how to get outer sweep parameter names and values?
 
             ana_dict[ana_type][sim_env] = {
                 'inner_sweep': inner_sweep,
@@ -178,21 +177,6 @@ class LibPSFParser:
                 ana_dict[ana_type][sim_env]['data'][harmonic] = data
             else:
                 ana_dict[ana_type][sim_env]['data'] = data
-
-    def parse_sweep_info(self, swp_info: Sequence[str], data: Dict[str, np.ndarray], suf: str) -> Sequence[str]:
-        # read from innermost sweep outwards
-        new_swp_info = list(swp_info)
-        swp_vars = []
-        while len(new_swp_info) > 0:
-            name = '-000_'.join(new_swp_info) + suf + '.sweep'
-            swp_vars.insert(0, self.parse_sweep_file(self._cwd_path / 'sim.raw.psf' / name, data))
-            new_swp_info.pop()
-        return swp_vars
-
-    @staticmethod
-    def parse_sweep_file(file_path: Path, data: Dict[str, np.ndarray]) -> str:
-        # TODO: how to parse this?
-        return ''
 
     def convert_to_sim_data(self, lp_data, rtol: float, atol: float) -> SimData:
         ana_dict = {}
