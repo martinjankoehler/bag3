@@ -39,6 +39,7 @@ from .data import (
 from .base import SimProcessManager, get_corner_temp
 from .hdf5 import load_sim_data_hdf5, save_sim_data_hdf5
 from .nutbin import NutBinParser
+from .libpsf_simdata import LibPSFParser
 
 # The use of pysrr to parse simulation data requires an external Python package.
 # Since this import is only required when pysrr is used, it is treated as an optional import
@@ -349,10 +350,15 @@ class SpectreInterface(SimProcessManager):
                     return
 
         # convert to HDF5
-        if self._out_fmt.startswith('psf'):
+        if self._out_fmt == 'psfxl':
             log_path = cwd_path / 'srr_to_hdf5.log'
             await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path, cwd_path)
-        elif self._out_fmt.startswith('nut'):
+        elif self._out_fmt == 'psfbin':
+            lpp = LibPSFParser(raw_path, rtol, atol)
+            save_sim_data_hdf5(lpp.sim_data, hdf5_path, compress)
+            # post-process HDF5 to convert to MD array
+            _process_hdf5(hdf5_path, rtol, atol)
+        elif self._out_fmt == 'nutbin':
             nbp_mc = False
             for fname in cwd_path.iterdir():
                 if str(fname).endswith('.mapping'):
@@ -395,9 +401,15 @@ class SpectreInterface(SimProcessManager):
             idx, raw_str = reg.group(1), reg.group(2)
             raw_path: Path = cwd_path / raw_str
             hdf5_path: Path = cwd_path / f'{raw_path.name}.hdf5'
-            log_path: Path = cwd_path / f'{raw_path.name}_srr_to_hdf5.log'
-            await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path,
-                                    cwd_path)
+            if self._out_fmt == 'psfxl':
+                log_path: Path = cwd_path / f'{raw_path.name}_srr_to_hdf5.log'
+                await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path,
+                                        cwd_path)
+            elif self._out_fmt == 'psfbin':
+                lpp = LibPSFParser(raw_path, rtol, atol)
+                save_sim_data_hdf5(lpp.sim_data, hdf5_path, compress)
+                # post-process HDF5 to convert to MD array
+                _process_hdf5(hdf5_path, rtol, atol)
             sim_data_list.append(load_sim_data_hdf5(hdf5_path))
 
         # combine all SimData to one SimData
