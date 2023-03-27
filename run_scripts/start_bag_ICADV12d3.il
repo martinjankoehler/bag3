@@ -917,9 +917,9 @@ procedure( get_unique_term_name( cvid name_base "gt")
 ; second element is the pin master cell, and third element is the pin master cellview.
 ; simulators is a list of simulator names for which termOrder should be updated.
 ; Usually simulators = '("auLvs" "auCdl" "spectre" "hspiceD")
-procedure( update_symbol_pin(lib_name cell_name pin_map new_pins sympin simulators "ttllll")
+procedure( update_symbol_pin(lib_name cell_name pin_map new_pins port_order sympin simulators "ttlllll")
     let( (snap_dist cvid pin_master cur_term_name new_term_name term pin bbox pin_x pin_y pin_location pin_direction
-          label_location label_rel_location temp_new_term_name new_term new_port_order cell_obj bc
+          label_location label_rel_location temp_new_term_name new_term cell_obj bc
           mpin_lib mpin_cell mpin_view pin_xy_info npin_xl npin_yl npin_xr npin_yr npin_name npin_type
           modified_pins)
 
@@ -940,11 +940,9 @@ procedure( update_symbol_pin(lib_name cell_name pin_map new_pins sympin simulato
         pin_xy_info = get_new_pin_locations(cvid snap_dist)
 
         ; modify existing pins
-        new_port_order = tconc(nil "")
         foreach( p pin_map
             cur_term_name = car(p)
             new_term_name = cadr(p)
-            new_port_order = tconc(new_port_order new_term_name)
             when( cur_term_name != new_term_name
                 modified_pins = 't
                 ; printf("%s %s\n" cur_term_name new_term_name)
@@ -1031,9 +1029,6 @@ procedure( update_symbol_pin(lib_name cell_name pin_map new_pins sympin simulato
                     error( "Terminal %s already exists" npin_name)
                 )
 
-                ; update pin order
-                new_port_order = tconc(new_port_order npin_name)
-
                 ; get pin location based on pin type
                 if( equal(npin_type "output") then
                     label_location = npin_xr:npin_yr
@@ -1056,8 +1051,7 @@ procedure( update_symbol_pin(lib_name cell_name pin_map new_pins sympin simulato
 
         when( modified_pins
             ; update pin order
-            new_port_order = cdar(new_port_order)
-            schEditPinOrder(cvid new_port_order 't)
+            schEditPinOrder(cvid port_order 't)
             dbSave(cvid)
 
             ; update termOrder for each simulators
@@ -1069,7 +1063,7 @@ procedure( update_symbol_pin(lib_name cell_name pin_map new_pins sympin simulato
                 error("Cannot find CDF parameters for %s__%s.  Delete generated cell and try again" lib_name cell_name)
             )
             foreach( simu simulators
-                get(bc->simInfo simu)->termOrder = new_port_order
+                get(bc->simInfo simu)->termOrder = port_order
             )
             unless( cdfSaveCDF(bc)
                 ddReleaseObj(cell_obj)
@@ -1474,12 +1468,12 @@ procedure( check_and_save_schematic(sch "g")
 )
 
 ; given a copied template cell, modify it to a concrete schematic.
-procedure( convert_template_cells(lib_name cell_name pin_map new_pins inst_list sympin ipin opin iopin simulators)
+procedure( convert_template_cells(lib_name cell_name pin_map new_pins inst_list port_order sympin ipin opin iopin simulators)
     let( (sym_cv sch)
         ; update symbol view first.
         if( sym_cv = dbOpenCellViewByType(lib_name cell_name "symbol" nil "r") then
             printf("*INFO* Updating %s__%s symbol pins.\n" lib_name cell_name)
-            update_symbol_pin(lib_name cell_name pin_map new_pins sympin simulators)
+            update_symbol_pin(lib_name cell_name pin_map new_pins port_order sympin simulators)
         else
             warn("Did not find symbol for %s__%s.  Skipping.  Is it testbench?" lib_name cell_name)
         )
@@ -1515,9 +1509,10 @@ procedure( create_concrete_schematic( lib_name tech_lib lib_path temp_file chang
             cell_name = change->name
             pin_map = change->pin_map
             new_pins = change->new_pins
+            port_order = change->port_order
             inst_list = change->inst_list
             printf("*INFO* Updating cell %s__%s\n" lib_name cell_name)
-            convert_template_cells( lib_name cell_name pin_map new_pins inst_list
+            convert_template_cells( lib_name cell_name pin_map new_pins inst_list port_order
                                     sympin ipin opin iopin simulators )
         )
         't

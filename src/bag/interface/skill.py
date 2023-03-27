@@ -259,7 +259,7 @@ class SkillInterface(DbAccess):
         template_list, change_list = [], []
         for content in content_list:
             if content is not None:
-                impl_cell, (master_lib, master_cell, pin_map, inst_map, new_pins) = content
+                impl_cell, (master_lib, master_cell, pin_map, inst_map, new_pins, port_order) = content
 
                 # add to template list
                 template_list.append([master_lib, master_cell, impl_cell])
@@ -270,6 +270,7 @@ class SkillInterface(DbAccess):
                     pin_map=dict_to_item_list(pin_map),
                     inst_list=format_inst_map(inst_map),
                     new_pins=new_pins,
+                    port_order=port_order,
                 )
                 change_list.append(change)
 
