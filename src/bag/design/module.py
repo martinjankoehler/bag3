@@ -55,7 +55,7 @@ import abc
 from pathlib import Path
 from itertools import zip_longest
 
-from pybag.core import PySchCellView, get_cv_header
+from pybag.core import PySchCellView, get_cv_header, get_cdba_name_bits
 from pybag.enum import TermType, SigType, DesignOutput, SupplyWrapMode, LogLevel
 
 from ..math import float_to_si_string
@@ -324,7 +324,13 @@ class Module(DesignMaster):
             for inst_name in self.deleted_instances:
                 inst_map[inst_name] = []
 
-            return cell_name, (self._orig_lib_name, self._orig_cell_name, self.pin_map, inst_map, self.new_pins)
+            # port_order: input, output, inout
+            _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
+            for _name, _type in self.pins.items():
+                _ports[_type].extend(get_cdba_name_bits(_name))
+            port_order = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
+            return cell_name, (self._orig_lib_name, self._orig_cell_name, self.pin_map, inst_map, self.new_pins,
+                               port_order)
 
         netlist = ''
         if not shell and output_type.is_model:
