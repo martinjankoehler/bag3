@@ -582,7 +582,11 @@ procedure( parse_cad_sch(lib_name cell_name view_name file_name "tttt")
                                     error( "Unrecognized shape~>labelType = %s" shape~>labelType )
                                 ))
                             else
-                                fprintf( p "%stext: %s\n" indent shape~>theLabel )
+                                if( shape~>layerNum == 230 then  ; text layer
+                                    fprintf( p "%stext: %A\n" indent shape~>theLabel )
+                                else
+                                    fprintf( p "%stext: %s\n" indent shape~>theLabel )
+                                )
                             )
                         else
                             fprintf( p "%stext: %s\n" indent shape~>net~>name )
