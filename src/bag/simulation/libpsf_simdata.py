@@ -41,8 +41,9 @@ from .nutbin import parse_sweep_info
 
 
 class LibPSFParser:
-    def __init__(self, raw_path: Path, rtol: float, atol: float) -> None:
+    def __init__(self, raw_path: Path, rtol: float, atol: float, num_proc: int = 1) -> None:
         self._cwd_path = raw_path.parent
+        self._num_proc = num_proc
         lp_data = self.parse_raw_folder(raw_path)
         self._sim_data = self.convert_to_sim_data(lp_data, rtol, atol)
 
@@ -52,6 +53,16 @@ class LibPSFParser:
 
     def parse_raw_folder(self, raw_path: Path) -> Mapping[str, Any]:
         ana_dict = {}
+        if self._num_proc == 1:
+            self._parse_raw_folder_helper(raw_path, ana_dict)
+        else:
+            # multi-processing mode
+            for pidx in range(self._num_proc):
+                self._parse_raw_folder_helper(raw_path / f'{pidx + 1}', ana_dict)
+        return ana_dict
+
+    def _parse_raw_folder_helper(self, raw_path: Path, ana_dict: Dict[str, Any]) -> None:
+        idx = 0     # keep track of which directories have already been checked for outer sweep info
         for fname in raw_path.iterdir():
             # some files have multiple suffixes, so split name at first '.' to get entire suffix
             suf = fname.name.split('.', 1)[-1]
@@ -59,8 +70,8 @@ class LibPSFParser:
                 info = self.get_info_from_fname(fname.name)
                 data, inner_sweep = self.parse_raw_file(fname)
                 info['inner_sweep'] = inner_sweep
-                self.populate_dict(ana_dict, info, data)
-        return ana_dict
+                self.populate_dict(ana_dict, info, raw_path, data, idx)
+                idx += 1
 
     @staticmethod
     def parse_raw_file(fname: Path) -> Tuple[Dict[str, Union[np.ndarray, float]], str]:
@@ -143,8 +154,8 @@ class LibPSFParser:
             harmonic=harmonic,
         )
 
-    def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any],
-                      data: Dict[str, Union[np.ndarray, float]]) -> None:
+    def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any], raw_path: Path,
+                      data: Dict[str, Union[np.ndarray, float]], idx: int) -> None:
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
         swp_key: str = info['swp_key']
@@ -157,7 +168,7 @@ class LibPSFParser:
 
         if sim_env not in ana_dict[ana_type]:
             # get outer sweep, if any
-            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / 'sim.raw', f'___{ana_type}__{sim_env}__',
+            swp_vars, swp_data = parse_sweep_info(swp_info, raw_path, f'___{ana_type}__{sim_env}__',
                                                   offset=16)
             ana_dict[ana_type][sim_env] = {
                 'inner_sweep': inner_sweep,
@@ -168,6 +179,14 @@ class LibPSFParser:
             }
             if swp_key or (harmonic is not None):
                 ana_dict[ana_type][sim_env]['data'] = {}
+
+        if self._num_proc > 1 and int(raw_path.name) > 1 and idx == 0:
+            # multi-processing mode, need to parse sweep file once in every distributed directory
+            swp_vars, swp_data = parse_sweep_info(swp_info, raw_path, f'___{ana_type}__{sim_env}__',
+                                                  offset=16)
+            for _key, _val in swp_data.items():
+                _val_ini = ana_dict[ana_type][sim_env]['swp_data'][_key]
+                ana_dict[ana_type][sim_env]['swp_data'][_key] = np.concatenate((_val_ini, _val))
 
         # PAC harmonics are handled separately from parametric sweep
         if swp_key:

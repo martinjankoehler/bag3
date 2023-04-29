@@ -66,7 +66,7 @@ class NutBinParser:
                 if len(plotname) == 0:  # EOF
                     break
                 data = self.parse_analysis(f)
-                self.populate_dict(ana_dict, plotname, data)
+                self.populate_dict(ana_dict, plotname, raw_path, data)
         return ana_dict
 
     @staticmethod
@@ -161,7 +161,8 @@ class NutBinParser:
             inner_sweep=inner_sweep,
         )
 
-    def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, data: Dict[str, Union[np.ndarray, float]]) -> None:
+    def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, raw_path: Path,
+                      data: Dict[str, Union[np.ndarray, float]]) -> None:
         # get analysis name and sim_env
         info = self.get_info_from_plotname(plotname)
         ana_name: str = info['ana_name']
@@ -179,7 +180,7 @@ class NutBinParser:
 
         if sim_env not in ana_dict[ana_type]:
             # get outer sweep, if any
-            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / 'sim.raw.psf',
+            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / f'{raw_path.name}.psf',
                                                   f'___{ana_type}__{sim_env}__', offset=44)
             ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep,
                                            'swp_vars': swp_vars, 'swp_data': swp_data}
@@ -331,9 +332,14 @@ def parse_sweep_info(swp_info: Sequence[str], raw_path: Path, suf: str, offset: 
     while len(new_swp_info) > 0:
         # assume nested sweeps are always consistent across outer sweeps, and read 0th sweep file only
         name = '-000_'.join(new_swp_info) + suf + '.sweep'
-        _swp_var, _swp_vals = parse_sweep_file(raw_path / name, offset)
-        swp_vars.insert(0, _swp_var)
-        swp_data[_swp_var] = _swp_vals
+        file_path = raw_path / name
+        if file_path.is_file():
+            _swp_var, _swp_vals = parse_sweep_file(raw_path / name, offset)
+            swp_vars.insert(0, _swp_var)
+            swp_data[_swp_var] = _swp_vals
+        else:
+            # this is in multiprocessing mode, so sweep is already read in 0th fork
+            swp_vars.insert(0, '')
         new_swp_info.pop()
     return swp_vars, swp_data
 
