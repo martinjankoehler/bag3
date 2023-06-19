@@ -468,7 +468,7 @@ class Module(DesignMaster):
             pin_type = TermType[pin_type]
 
         self._cv.add_pin(new_pin, pin_type.value, sig_type.value)
-        if pin_type.name is 'inout':
+        if pin_type.name == 'inout':
             npin_type = 'inputOutput'
         else:
             npin_type = pin_type.name

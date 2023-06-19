@@ -50,7 +50,7 @@ from typing import TypeVar, Any, Generic, Dict, Iterable, Tuple, Union, Optional
 
 import sys
 import bisect
-from collections import Hashable, Mapping, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 
 T = TypeVar('T')
 U = TypeVar('U')
