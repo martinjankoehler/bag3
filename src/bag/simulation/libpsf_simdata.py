@@ -174,7 +174,7 @@ class LibPSFParser:
             swp_vars, swp_data = parse_sweep_info(swp_info, raw_path, ana_type, sim_env, offset=16)
             ana_dict[ana_type][sim_env] = {
                 'inner_sweep': inner_sweep,
-                'outer_sweep': swp_key is not '',
+                'outer_sweep': swp_key != '',
                 'harmonics': harmonic is not None,
                 'swp_vars': swp_vars,
                 'swp_data': swp_data,
